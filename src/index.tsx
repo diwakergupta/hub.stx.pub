@@ -1,17 +1,24 @@
 import { serve } from "bun";
+import { getMinerPowerSnapshot } from "./server/miner-power";
 import index from "./index.html";
+
+const isProduction = process.env.NODE_ENV === "production";
+const htmlHeaders = {
+  "Content-Type": "text/html; charset=utf-8",
+};
 
 const server = serve({
   routes: {
-    // Serve index.html for all unmatched routes.
-    "/*": index,
+    "/": index,
+
+    "/api/miners/power": () => {
+      const snapshot = getMinerPowerSnapshot();
+      return Response.json(snapshot);
+    },
   },
 
-  development: process.env.NODE_ENV !== "production" && {
-    // Enable browser hot reloading in development
+  development: !isProduction && {
     hmr: true,
-
-    // Echo console logs from the browser to the server
     console: true,
   },
 });

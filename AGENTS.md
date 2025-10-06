@@ -2,6 +2,7 @@ This project uses the following tech stack:
 - Bun (runtime, package manager, bundler, test runner)
 - React (frontend library)
 - Chakra UI (component library)
+- sqlite for backend storage. Use bun's built-in sqlite driver for interactive with sqlite
 
 ## Chakra UI
 
