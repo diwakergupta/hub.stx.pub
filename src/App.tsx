@@ -1,12 +1,23 @@
 import "./index.css";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { D2 } from "@terrastruct/d2";
-import { Box, Container, Flex, Heading, Link, Spinner, Stack, Table, Text } from "@chakra-ui/react";
+import {
+  Box,
+  Container,
+  Flex,
+  Heading,
+  Link,
+  Spinner,
+  Stack,
+  Table,
+  Text,
+} from "@chakra-ui/react";
 
 import { Provider } from "@/components/ui/provider";
 import { ColorModeButton } from "@/components/ui/color-mode";
 import type { MinerPowerSnapshot } from "@/shared/miner-power";
+import panzoom, { type PanzoomInstance } from "@/lib/panzoom";
 
 interface MinerVizResponse {
   bitcoinBlockHeight: number;
@@ -117,6 +128,47 @@ function useMinerPower(): MinerPowerState {
 }
 
 function DiagramView({ state }: { state: VizState }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const panzoomRef = useRef<PanzoomInstance | null>(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    if (state.status !== "ready") {
+      container.innerHTML = "";
+      panzoomRef.current?.dispose();
+      panzoomRef.current = null;
+      return;
+    }
+
+    container.innerHTML = state.svg;
+    const svg = container.querySelector("svg");
+    if (!svg) {
+      return;
+    }
+
+    // Ensure the SVG scales responsively inside the container.
+    const svgElement = svg as SVGSVGElement;
+    svgElement.style.display = "block";
+    svgElement.style.width = "100%";
+    svgElement.style.height = "auto";
+    svgElement.setAttribute("role", svgElement.getAttribute("role") ?? "img");
+
+    panzoomRef.current?.dispose();
+    panzoomRef.current = panzoom(container, svgElement, {
+      maxScale: 10,
+      minScale: 0.2,
+      zoomSpeed: 0.002,
+    });
+
+    return () => {
+      panzoomRef.current?.dispose();
+      panzoomRef.current = null;
+      container.innerHTML = "";
+    };
+  }, [state]);
+
   if (state.status === "loading" || state.status === "idle") {
     return (
       <Flex
@@ -166,6 +218,7 @@ function DiagramView({ state }: { state: VizState }) {
       borderRadius="lg"
       borderColor="gray.200"
       bg="white"
+      width="full"
       p={6}
     >
       <Stack>
@@ -190,12 +243,16 @@ function DiagramView({ state }: { state: VizState }) {
       <Box
         borderWidth="1px"
         borderRadius="md"
-        overflow="auto"
-        maxH="600px"
+        overflow="hidden"
+        maxH="800px"
+        minH="480px"
         borderColor="gray.100"
         bg="white"
-        dangerouslySetInnerHTML={{ __html: state.svg }}
+        ref={containerRef}
       />
+      <Text fontSize="xs" color="gray.500">
+        Scroll to zoom, drag to pan. Double-click anywhere to reset the view.
+      </Text>
     </Stack>
   );
 }
@@ -276,8 +333,15 @@ function MinerPowerView({ state }: { state: MinerPowerState }) {
             Updated {new Date(payload.generatedAt).toLocaleString()}
           </Text>
         </Stack>
-        <Stack spacing={0} fontSize="xs" color="gray.500" align={{ base: "flex-start", md: "flex-end" }}>
-          <Text>Bitcoin block {payload.bitcoinBlockHeight.toLocaleString()}</Text>
+        <Stack
+          spacing={0}
+          fontSize="xs"
+          color="gray.500"
+          align={{ base: "flex-start", md: "flex-end" }}
+        >
+          <Text>
+            Bitcoin block {payload.bitcoinBlockHeight.toLocaleString()}
+          </Text>
           {payload.sortitionId && <Text>Sortition {payload.sortitionId}</Text>}
         </Stack>
       </Stack>
