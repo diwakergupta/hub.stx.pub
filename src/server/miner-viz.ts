@@ -110,7 +110,7 @@ export function fetchCommitData(
       vtxindex: row.vtxindex ?? 0,
       sender: row.apparent_sender ?? "",
       burnBlockHeight: row.block_height ?? 0,
-      spend: row.burn_fee ?? 0,
+      spend: Number(row.burn_fee) || 0,
       sortitionId: row.sortition_id ?? "",
       parentBlockPtr: row.parent_block_ptr ?? 0,
       parentVtxindex: row.parent_vtxindex ?? 0,
@@ -139,7 +139,10 @@ export function fetchCommitData(
 
     allCommits.set(commit.txid, commit);
     hashMap.set(commit.key, commit.txid);
+  }
 
+  // loop over all commits in allCommits
+  for (const commit of allCommits.values()) {
     const bucket = commitsByBlock.get(commit.burnBlockHeight);
     if (bucket) {
       bucket.push(commit);
