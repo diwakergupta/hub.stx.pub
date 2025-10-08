@@ -1,72 +1,15 @@
 import { Database, type Statement } from "bun:sqlite";
-import { join } from "path";
 
-import { getStacksDataDir } from "./env";
+import { CHAINSTATE_DB_RELATIVE, SORTITION_DB_RELATIVE } from "./paths";
 
 export interface MinerVizSnapshot {
-  bitcoinBlockHeight: number;
   generatedAt: string;
+  bitcoinBlockHeight: number;
+  sortitionId: string | null;
   d2Source: string;
-  isSample: boolean;
-  description: string;
 }
 
-const BLOCK_WINDOW = 20;
-const SORTITION_DB_RELATIVE = "burnchain/sortition/marf.sqlite";
-const CHAINSTATE_DB_RELATIVE = "chainstate/vm/index.sqlite";
-const HUB_DB_RELATIVE = "hub.sqlite";
-
-const SAMPLE_D2 = `direction: right
-
-block_sample_1: {
-  label: "Bitcoin Block 808900"
-  shape: container
-  commit_alpha: {
-    label: "⛏️ Miner Alpha\n🔗 123\n💸 420K sats\nmemo: sample"
-    style: {
-      fill: "#E0BBE4"
-      stroke: "#2B6CB0"
-      stroke-width: 3
-    }
-  }
-  commit_beta: {
-    label: "⛏️ Miner Beta\n🔗 122\n💸 210K sats\nmemo: sample"
-    style: {
-      fill: "#B6E3F4"
-      stroke: "#2D3748"
-      stroke-width: 1.5
-      stroke-dash: "6 4"
-    }
-  }
-}
-
-block_sample_2: {
-  label: "Bitcoin Block 808901"
-  shape: container
-  commit_gamma: {
-    label: "⛏️ Miner Gamma\n🔗 124\n💸 380K sats\nmemo: sample"
-    style: {
-      fill: "#F4ACB7"
-      stroke: "#2B6CB0"
-      stroke-width: 3
-    }
-  }
-}
-
-block_sample_1.commit_beta -> block_sample_2.commit_gamma: {
-  style: {
-    stroke: "#E53E3E"
-    stroke-width: 3
-  }
-}
-
-block_sample_1.commit_alpha -> block_sample_2.commit_gamma: {
-  style: {
-    stroke: "#3182CE"
-    stroke-width: 4
-  }
-}
-`;
+export const MINER_VIZ_WINDOW = 20;
 
 interface BlockCommitRow {
   burn_header_hash: string;
@@ -85,6 +28,7 @@ interface SnapshotRow {
   winning_block_txid: string;
   canonical_stacks_tip_height: number;
   consensus_hash: string;
+  sortition_id: string | null;
 }
 
 interface PaymentRow {
@@ -127,56 +71,12 @@ interface BlockCommits {
   commitsByBlock: Map<number, BlockCommit[]>;
 }
 
-function sampleSnapshot(): MinerVizSnapshot {
-  return {
-    bitcoinBlockHeight: 808_901,
-    generatedAt: new Date().toISOString(),
-    d2Source: SAMPLE_D2,
-    isSample: true,
-    description:
-      "Sample visualization showing two consecutive Bitcoin blocks and their associated Stacks miner commits.",
-  };
-}
-
-function ensureReadOnlyDatabase(path: string): Database {
-  return new Database(path, {
-    readonly: true,
-    strict: true,
-  });
-}
-
-function ensureHubDatabase(path: string): Database {
-  const db = new Database(path, {
-    create: true,
-    readwrite: true,
-  });
-  db.exec(`CREATE TABLE IF NOT EXISTS dots (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    bitcoin_block_height INTEGER,
-    dot TEXT NOT NULL
-  )`);
-  return db;
-}
-
-function getBlockRange(
-  db: Database,
-  numBlocks: number,
-): { start: number; lowerBound: number } {
-  const stmt = db.prepare<{ maxHeight: number | null }>(
-    "SELECT MAX(block_height) as maxHeight FROM block_commits",
-  );
-  const row = stmt.get();
-  const start = row?.maxHeight ?? 0;
-  return { start, lowerBound: start - numBlocks };
-}
-
 function makeHashKey(height: number, vtxindex: number): string {
   return `${height}:${vtxindex}`;
 }
 
-function fetchCommitData(
-  db: Database,
+export function fetchCommitData(
+  sortitionDb: Database,
   lowerBound: number,
   startBlock: number,
 ): BlockCommits {
@@ -185,7 +85,7 @@ function fetchCommitData(
   const commitsByBlock = new Map<number, BlockCommit[]>();
   const hashMap = new Map<string, string>();
 
-  const stmt = db.prepare<BlockCommitRow>(
+  const stmt = sortitionDb.prepare<BlockCommitRow>(
     `SELECT
         burn_header_hash,
         txid,
@@ -284,21 +184,22 @@ function processWinningCommit(
     commit.blockHash = payment.block_hash ?? commit.blockHash;
     commit.coinbaseEarned = payment.coinbase ?? commit.coinbaseEarned;
   }
+
   const feesRow = feesStmt.get(commit.burnBlockHeight);
   if (feesRow?.tenure_tx_fees != null) {
     commit.feesEarned = feesRow.tenure_tx_fees;
   }
 }
 
-function processWinningBlocks(
+export function processWinningBlocks(
   sortitionDb: Database,
   chainstateDb: Database,
   lowerBound: number,
   startBlock: number,
   blockCommits: BlockCommits,
-) {
+): SnapshotRow | undefined {
   const snapshotStmt = sortitionDb.prepare<SnapshotRow>(
-    `SELECT winning_block_txid, canonical_stacks_tip_height, consensus_hash
+    `SELECT winning_block_txid, canonical_stacks_tip_height, consensus_hash, sortition_id
       FROM snapshots
       WHERE block_height = ?`,
   );
@@ -312,6 +213,8 @@ function processWinningBlocks(
       LIMIT 1`,
   );
 
+  let latestSnapshot: SnapshotRow | undefined;
+
   for (let height = lowerBound; height <= startBlock; height += 1) {
     const commits = blockCommits.commitsByBlock.get(height);
     if (!commits || commits.length === 0) {
@@ -322,6 +225,8 @@ function processWinningBlocks(
     if (!snapshot) {
       continue;
     }
+
+    latestSnapshot = snapshot;
 
     for (const commit of commits) {
       commit.stacksHeight =
@@ -341,9 +246,11 @@ function processWinningBlocks(
       }
     }
   }
+
+  return latestSnapshot;
 }
 
-function processCanonicalTip(
+export function processCanonicalTip(
   sortitionDb: Database,
   startBlock: number,
   commits: Map<string, BlockCommit>,
@@ -440,7 +347,7 @@ interface NodeStyle {
   fill: string;
   stroke: string;
   strokeWidth: number;
-  strokeDash?: string;
+  strokeDash?: number;
 }
 
 function makeNodeStyle(commit: BlockCommit): NodeStyle {
@@ -448,11 +355,13 @@ function makeNodeStyle(commit: BlockCommit): NodeStyle {
     fill: stringToColor(commit.sender),
     stroke: "#2D3748",
     strokeWidth: 1,
+    strokeDash: 3,
   };
 
   if (commit.won) {
     style.stroke = "#2B6CB0";
-    style.strokeWidth = 2;
+    style.strokeWidth = 3;
+    style.strokeDash = undefined;
   }
 
   if (commit.tip) {
@@ -501,7 +410,7 @@ function makeEdgeStyle(
   return style;
 }
 
-function generateD2(
+export function generateD2(
   lowerBound: number,
   startBlock: number,
   blockCommits: BlockCommits,
@@ -586,134 +495,32 @@ function generateD2(
   return [...lines, ...edgeLines].join("\n");
 }
 
-function createSnapshot(
-  d2: string,
-  bitcoinBlockHeight: number,
-  isSample: boolean,
-): MinerVizSnapshot {
+export function computeMinerVizSnapshot(params: {
+  sortitionDb: Database;
+  chainstateDb: Database;
+  lowerBound: number;
+  startBlock: number;
+  generatedAt?: string;
+}): MinerVizSnapshot {
+  const { sortitionDb, chainstateDb, lowerBound, startBlock, generatedAt } =
+    params;
+
+  const blockCommits = fetchCommitData(sortitionDb, lowerBound, startBlock);
+  const latestSnapshot = processWinningBlocks(
+    sortitionDb,
+    chainstateDb,
+    lowerBound,
+    startBlock,
+    blockCommits,
+  );
+  processCanonicalTip(sortitionDb, startBlock, blockCommits.allCommits);
+
+  const d2Source = generateD2(lowerBound, startBlock, blockCommits);
+
   return {
-    bitcoinBlockHeight,
-    generatedAt: new Date().toISOString(),
-    d2Source: d2,
-    isSample,
-    description: `Stacks miner commits across the last ${BLOCK_WINDOW} Bitcoin blocks (computed via Bun).`,
+    bitcoinBlockHeight: startBlock,
+    generatedAt: generatedAt ?? new Date().toISOString(),
+    sortitionId: latestSnapshot?.sortition_id ?? null,
+    d2Source,
   };
-}
-
-function isLegacyGraphvizDocument(dot: string | null | undefined): boolean {
-  if (!dot) {
-    return false;
-  }
-  const trimmed = dot.trimStart();
-  return trimmed.startsWith("digraph") || trimmed.includes("graph [ratio=compress");
-}
-
-export function runMinerVizTask(): MinerVizSnapshot {
-  const dataDir = getStacksDataDir();
-  if (!dataDir) {
-    return sampleSnapshot();
-  }
-
-  const sortitionPath = join(dataDir, SORTITION_DB_RELATIVE);
-  const chainstatePath = join(dataDir, CHAINSTATE_DB_RELATIVE);
-  const hubPath = join(dataDir, HUB_DB_RELATIVE);
-
-  let sortitionDb: Database | undefined;
-  let chainstateDb: Database | undefined;
-  let hubDb: Database | undefined;
-
-  try {
-    sortitionDb = ensureReadOnlyDatabase(sortitionPath);
-    chainstateDb = ensureReadOnlyDatabase(chainstatePath);
-
-    sortitionDb.exec("PRAGMA query_only = true");
-    chainstateDb.exec("PRAGMA query_only = true");
-
-    const { start, lowerBound } = getBlockRange(sortitionDb, BLOCK_WINDOW);
-    if (start === 0) {
-      return sampleSnapshot();
-    }
-
-    const blockCommits = fetchCommitData(sortitionDb, lowerBound, start);
-    processWinningBlocks(
-      sortitionDb,
-      chainstateDb,
-      lowerBound,
-      start,
-      blockCommits,
-    );
-    processCanonicalTip(sortitionDb, start, blockCommits.allCommits);
-
-    const d2 = generateD2(lowerBound, start, blockCommits);
-    const snapshot = createSnapshot(d2, start, false);
-
-    hubDb = ensureHubDatabase(hubPath);
-    const insertStmt = hubDb.prepare(
-      "INSERT INTO dots (bitcoin_block_height, dot) VALUES (?, ?)",
-    );
-    insertStmt.run(start, d2);
-
-    return snapshot;
-  } catch (error) {
-    console.warn(
-      "Failed to generate miner visualization; serving sample data",
-      error,
-    );
-    return sampleSnapshot();
-  } finally {
-    sortitionDb?.close();
-    chainstateDb?.close();
-    hubDb?.close();
-  }
-}
-
-export function getLatestMinerViz(): MinerVizSnapshot {
-  const dataDir = getStacksDataDir();
-  if (!dataDir) {
-    return sampleSnapshot();
-  }
-
-  const hubPath = join(dataDir, HUB_DB_RELATIVE);
-  let hubDb: Database | undefined;
-
-  try {
-    hubDb = new Database(hubPath, {
-      readonly: true,
-      strict: true,
-    });
-    hubDb.exec("PRAGMA query_only = true");
-
-    const row = hubDb
-      .prepare<{
-        generatedAt: string;
-        bitcoinBlockHeight: number;
-        dot: string;
-      }>(
-        `SELECT timestamp AS generatedAt, bitcoin_block_height AS bitcoinBlockHeight, dot
-         FROM dots
-         ORDER BY timestamp DESC
-         LIMIT 1`,
-      )
-      .get();
-
-    if (row && row.dot && !isLegacyGraphvizDocument(row.dot)) {
-      return {
-        bitcoinBlockHeight: row.bitcoinBlockHeight ?? 0,
-        generatedAt: row.generatedAt ?? new Date().toISOString(),
-        d2Source: row.dot,
-        isSample: false,
-        description: `Stacks miner commits across the last ${BLOCK_WINDOW} Bitcoin blocks (cached snapshot).`,
-      };
-    }
-
-    return runMinerVizTask();
-  } catch (error) {
-    console.warn(
-      "Unable to load cached miner visualization; regenerating",
-      error,
-    );
-    return runMinerVizTask();
-  } finally {
-    hubDb?.close();
-  }
 }

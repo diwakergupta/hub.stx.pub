@@ -11,5 +11,6 @@ export interface MinerPowerSnapshot {
   items: MinerPowerRow[];
   windowSize: number;
   generatedAt: string;
-  isSample: boolean;
+  bitcoinBlockHeight: number;
+  sortitionId: string | null;
 }

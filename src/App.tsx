@@ -2,18 +2,7 @@ import "./index.css";
 
 import { useEffect, useMemo, useState } from "react";
 import { D2 } from "@terrastruct/d2";
-import {
-  Badge,
-  Box,
-  Container,
-  Flex,
-  Heading,
-  Link,
-  Spinner,
-  Stack,
-  Table,
-  Text,
-} from "@chakra-ui/react";
+import { Box, Container, Flex, Heading, Link, Spinner, Stack, Table, Text } from "@chakra-ui/react";
 
 import { Provider } from "@/components/ui/provider";
 import { ColorModeButton } from "@/components/ui/color-mode";
@@ -23,7 +12,7 @@ interface MinerVizResponse {
   bitcoinBlockHeight: number;
   generatedAt: string;
   d2Source: string;
-  isSample: boolean;
+  sortitionId: string | null;
   description: string;
 }
 
@@ -58,7 +47,6 @@ function useMinerViz(): VizState {
         }
 
         const payload = (await response.json()) as MinerVizResponse;
-        console.log(payload);
         const compiled = await d2.compile(payload.d2Source);
         const svg = await d2.render(compiled.diagram, compiled.renderOptions);
 
@@ -189,9 +177,9 @@ function DiagramView({ state }: { state: VizState }) {
           {state.payload.bitcoinBlockHeight.toLocaleString()} · Updated{" "}
           {new Date(state.payload.generatedAt).toLocaleString()}
         </Text>
-        {state.payload.isSample && (
-          <Text fontSize="sm" color="orange.500">
-            Sample data for MVP preview
+        {state.payload.sortitionId && (
+          <Text fontSize="sm" color="gray.500">
+            Sortition ID {state.payload.sortitionId}
           </Text>
         )}
         <Text fontSize="sm" color="gray.500">
@@ -275,7 +263,11 @@ function MinerPowerView({ state }: { state: MinerPowerState }) {
       bg="white"
       p={6}
     >
-      <Stack direction={{ base: "column", md: "row" }} justify="space-between">
+      <Stack
+        direction={{ base: "column", md: "row" }}
+        justify="space-between"
+        align={{ base: "flex-start", md: "center" }}
+      >
         <Stack>
           <Heading as="h3" size="md">
             Miner Power · Last {payload.windowSize} Blocks
@@ -284,14 +276,10 @@ function MinerPowerView({ state }: { state: MinerPowerState }) {
             Updated {new Date(payload.generatedAt).toLocaleString()}
           </Text>
         </Stack>
-        {payload.isSample && (
-          <Badge
-            colorScheme="orange"
-            alignSelf={{ base: "flex-start", md: "center" }}
-          >
-            Sample data
-          </Badge>
-        )}
+        <Stack spacing={0} fontSize="xs" color="gray.500" align={{ base: "flex-start", md: "flex-end" }}>
+          <Text>Bitcoin block {payload.bitcoinBlockHeight.toLocaleString()}</Text>
+          {payload.sortitionId && <Text>Sortition {payload.sortitionId}</Text>}
+        </Stack>
       </Stack>
 
       <Table.ScrollArea
