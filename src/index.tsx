@@ -1,5 +1,6 @@
 import { serve } from "bun";
 import { getMinerPowerSnapshot } from "./server/miner-power";
+import { getLatestMinerViz } from "./server/miner-viz";
 import index from "./index.html";
 
 const isProduction = process.env.NODE_ENV === "production";
@@ -14,6 +15,11 @@ const server = serve({
     "/api/miners/power": () => {
       const snapshot = getMinerPowerSnapshot();
       return Response.json(snapshot);
+    },
+
+    "/api/miners/viz": () => {
+      const viz = getLatestMinerViz();
+      return Response.json(viz);
     },
   },
 

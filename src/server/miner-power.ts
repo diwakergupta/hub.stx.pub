@@ -90,8 +90,7 @@ function buildMinerAddressMaps(
   const btcToStacks = new Map<string, Set<string>>();
 
   const escaped = escapeSqliteString(`${sortitionPath}`);
-  // TODO: figure out how to open this in read-only mode
-  chainstateDb.run(`ATTACH DATABASE '${escaped}' AS sortition`);
+  chainstateDb.exec(`ATTACH DATABASE '${escaped}' AS sortition`);
 
   try {
     const stmt = chainstateDb.prepare<AddressMapRow>(

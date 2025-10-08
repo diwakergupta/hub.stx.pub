@@ -416,6 +416,7 @@ export function App() {
             </Stack>
 
             <MinerPowerView state={minerPowerState} />
+            <DiagramView state={vizState} />
           </Stack>
         </Container>
 

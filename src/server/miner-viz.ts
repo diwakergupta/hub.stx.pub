@@ -600,6 +600,14 @@ function createSnapshot(
   };
 }
 
+function isLegacyGraphvizDocument(dot: string | null | undefined): boolean {
+  if (!dot) {
+    return false;
+  }
+  const trimmed = dot.trimStart();
+  return trimmed.startsWith("digraph") || trimmed.includes("graph [ratio=compress");
+}
+
 export function runMinerVizTask(): MinerVizSnapshot {
   const dataDir = getStacksDataDir();
   if (!dataDir) {
@@ -637,7 +645,6 @@ export function runMinerVizTask(): MinerVizSnapshot {
     processCanonicalTip(sortitionDb, start, blockCommits.allCommits);
 
     const d2 = generateD2(lowerBound, start, blockCommits);
-    console.log(d2);
     const snapshot = createSnapshot(d2, start, false);
 
     hubDb = ensureHubDatabase(hubPath);
@@ -689,7 +696,7 @@ export function getLatestMinerViz(): MinerVizSnapshot {
       )
       .get();
 
-    if (row && row.dot) {
+    if (row && row.dot && !isLegacyGraphvizDocument(row.dot)) {
       return {
         bitcoinBlockHeight: row.bitcoinBlockHeight ?? 0,
         generatedAt: row.generatedAt ?? new Date().toISOString(),

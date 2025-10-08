@@ -3,6 +3,7 @@ This project uses the following tech stack:
 - React (frontend library)
 - Chakra UI (component library)
 - sqlite for backend storage. Use bun's built-in sqlite driver for interactive with sqlite
+- D2 for diagrams. Style attributes are documented at https://d2lang.com/tour/style/
 
 ## Chakra UI
 
