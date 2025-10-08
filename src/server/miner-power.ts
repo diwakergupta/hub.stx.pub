@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { join } from "path";
 
 import type { MinerPowerRow, MinerPowerSnapshot } from "@/shared/miner-power";
+import { getStacksDataDir } from "./env";
 
 const WINDOW_SIZE = 144;
 const SORTITION_DB_RELATIVE = "burnchain/sortition/marf.sqlite";
@@ -47,14 +48,6 @@ const SAMPLE_MINER_POWER: MinerPowerSnapshot = {
   ],
 };
 
-function getStacksDataDir(): string | null {
-  const dir = process.env.STACKS_DATA_DIR?.trim();
-  if (!dir) {
-    return null;
-  }
-  return dir;
-}
-
 function escapeSqliteString(input: string): string {
   return input.replaceAll("'", "''");
 }
@@ -97,7 +90,8 @@ function buildMinerAddressMaps(
   const btcToStacks = new Map<string, Set<string>>();
 
   const escaped = escapeSqliteString(`${sortitionPath}`);
-  chainstateDb.exec(`ATTACH DATABASE '${escaped}' AS sortition`);
+  // TODO: figure out how to open this in read-only mode
+  chainstateDb.run(`ATTACH DATABASE '${escaped}' AS sortition`);
 
   try {
     const stmt = chainstateDb.prepare<AddressMapRow>(
