@@ -13,11 +13,10 @@ import {
   Table,
   Text,
 } from "@chakra-ui/react";
-
+import createPanZoom, { type PanZoom } from "panzoom";
 import { Provider } from "@/components/ui/provider";
 import { ColorModeButton } from "@/components/ui/color-mode";
 import type { MinerPowerSnapshot } from "@/shared/miner-power";
-import panzoom, { type PanzoomInstance } from "@/lib/panzoom";
 
 interface MinerVizResponse {
   bitcoinBlockHeight: number;
@@ -129,7 +128,7 @@ function useMinerPower(): MinerPowerState {
 
 function DiagramView({ state }: { state: VizState }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const panzoomRef = useRef<PanzoomInstance | null>(null);
+  const panzoomRef = useRef<PanZoom | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -156,10 +155,11 @@ function DiagramView({ state }: { state: VizState }) {
     svgElement.setAttribute("role", svgElement.getAttribute("role") ?? "img");
 
     panzoomRef.current?.dispose();
-    panzoomRef.current = panzoom(container, svgElement, {
-      maxScale: 10,
-      minScale: 0.2,
-      zoomSpeed: 0.002,
+    panzoomRef.current = createPanZoom(svgElement, {
+      maxZoom: 10,
+      minZoom: 1,
+      zoomSpeed: 1,
+      initialZoom: 2,
     });
 
     return () => {
@@ -219,7 +219,8 @@ function DiagramView({ state }: { state: VizState }) {
       borderColor="gray.200"
       bg="white"
       width="full"
-      p={6}
+      p={{ base: 4, md: 6 }}
+      gap={6}
     >
       <Stack>
         <Heading as="h3" size="md">
@@ -244,11 +245,11 @@ function DiagramView({ state }: { state: VizState }) {
         borderWidth="1px"
         borderRadius="md"
         overflow="hidden"
-        maxH="800px"
-        minH="480px"
         borderColor="gray.100"
         bg="white"
         ref={containerRef}
+        minH={{ base: "60vh", md: "70vh" }}
+        maxH="85vh"
       />
       <Text fontSize="xs" color="gray.500">
         Scroll to zoom, drag to pan. Double-click anywhere to reset the view.
@@ -438,10 +439,14 @@ export function App() {
       <Flex direction="column" minH="100vh">
         <Box as="header" borderBottomWidth="1px">
           <Container
-            maxW="5xl"
+            maxW={{ base: "100%", md: "6xl" }}
             py={4}
+            px={{ base: 4, md: 6 }}
             display="flex"
             justifyContent="space-between"
+            alignItems="center"
+            gap={4}
+            flexWrap="wrap"
           >
             <Stack gap={1}>
               <Heading size="lg">Stacks Hub</Heading>
@@ -458,9 +463,15 @@ export function App() {
           </Container>
         </Box>
 
-        <Container as="main" maxW="5xl" py={10} flex="1">
-          <Stack gap={8}>
-            <Stack gap={3}>
+        <Container
+          as="main"
+          maxW={{ base: "100%", md: "6xl" }}
+          py={{ base: 8, md: 12 }}
+          px={{ base: 4, md: 6 }}
+          flex="1"
+        >
+          <Stack gap={10}>
+            <Stack gap={4}>
               <Heading size="2xl">{heroCopy.title}</Heading>
               <Text fontSize="lg" color="gray.500">
                 {heroCopy.subtitle}
@@ -473,7 +484,11 @@ export function App() {
         </Container>
 
         <Box as="footer" borderTopWidth="1px">
-          <Container maxW="5xl" py={6}>
+          <Container
+            maxW={{ base: "100%", md: "6xl" }}
+            py={6}
+            px={{ base: 4, md: 6 }}
+          >
             <Stack
               direction={{ base: "column", md: "row" }}
               justify="space-between"
