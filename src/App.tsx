@@ -127,6 +127,7 @@ function useMinerPower(): MinerPowerState {
 }
 
 function DiagramView({ state }: { state: VizState }) {
+  const ENABLE_PAN_ZOOM = false; // flip to true when you want it back
   const containerRef = useRef<HTMLDivElement | null>(null);
   const panzoomRef = useRef<PanZoom | null>(null);
 
@@ -138,6 +139,7 @@ function DiagramView({ state }: { state: VizState }) {
       container.innerHTML = "";
       panzoomRef.current?.dispose();
       panzoomRef.current = null;
+      container.style.overflow = "";
       return;
     }
 
@@ -147,13 +149,21 @@ function DiagramView({ state }: { state: VizState }) {
       return;
     }
 
-    // Ensure the SVG scales responsively inside the container.
     const svgElement = svg as SVGSVGElement;
     svgElement.style.display = "block";
     svgElement.style.width = "100%";
     svgElement.style.height = "auto";
     svgElement.setAttribute("role", svgElement.getAttribute("role") ?? "img");
 
+    if (!ENABLE_PAN_ZOOM) {
+      container.style.overflow = "auto";
+      return () => {
+        container.innerHTML = "";
+        container.style.overflow = "";
+      };
+    }
+
+    container.style.overflow = "hidden";
     panzoomRef.current?.dispose();
     panzoomRef.current = createPanZoom(svgElement, {
       maxZoom: 10,
@@ -166,6 +176,7 @@ function DiagramView({ state }: { state: VizState }) {
       panzoomRef.current?.dispose();
       panzoomRef.current = null;
       container.innerHTML = "";
+      container.style.overflow = "";
     };
   }, [state]);
 
@@ -244,16 +255,18 @@ function DiagramView({ state }: { state: VizState }) {
       <Box
         borderWidth="1px"
         borderRadius="md"
-        overflow="hidden"
+        overflow={ENABLE_PAN_ZOOM ? "hidden" : "auto"}
         borderColor="gray.100"
         bg="white"
         ref={containerRef}
         minH={{ base: "60vh", md: "70vh" }}
-        maxH="85vh"
+        maxH="100vh"
       />
-      <Text fontSize="xs" color="gray.500">
-        Scroll to zoom, drag to pan. Double-click anywhere to reset the view.
-      </Text>
+      {ENABLE_PAN_ZOOM ? (
+        <Text fontSize="xs" color="gray.500">
+          Scroll to zoom, drag to pan. Double-click anywhere to reset the view.
+        </Text>
+      ) : null}
     </Stack>
   );
 }
