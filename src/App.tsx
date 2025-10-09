@@ -57,7 +57,10 @@ function useMinerViz(): VizState {
         }
 
         const payload = (await response.json()) as MinerVizResponse;
-        const compiled = await d2.compile(payload.d2Source);
+        const compiled = await d2.compile(payload.d2Source, {
+          layout: "dagre",
+          pad: 0,
+        });
         const svg = await d2.render(compiled.diagram, compiled.renderOptions);
 
         if (!disposed) {
@@ -151,7 +154,7 @@ function DiagramView({ state }: { state: VizState }) {
 
     const svgElement = svg as SVGSVGElement;
     svgElement.style.display = "block";
-    svgElement.style.width = "100%";
+    svgElement.style.width = "1440px";
     svgElement.style.height = "auto";
     svgElement.setAttribute("role", svgElement.getAttribute("role") ?? "img");
 
@@ -229,9 +232,9 @@ function DiagramView({ state }: { state: VizState }) {
       borderRadius="lg"
       borderColor="gray.200"
       bg="white"
-      width="full"
-      p={{ base: 4, md: 6 }}
-      gap={6}
+      width="100%"
+      p={{ base: 4, md: 6, lg: 8 }}
+      gap={{ base: 4, md: 6 }}
     >
       <Stack>
         <Heading as="h3" size="md">
@@ -259,8 +262,9 @@ function DiagramView({ state }: { state: VizState }) {
         borderColor="gray.100"
         bg="white"
         ref={containerRef}
-        minH={{ base: "60vh", md: "70vh" }}
-        maxH="100vh"
+        minH={{ base: "65vh", md: "78vh", lg: "82vh" }}
+        maxH={ENABLE_PAN_ZOOM ? "95vh" : undefined}
+        width="100%"
       />
       {ENABLE_PAN_ZOOM ? (
         <Text fontSize="xs" color="gray.500">
