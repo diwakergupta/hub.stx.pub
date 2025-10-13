@@ -346,71 +346,124 @@ function buildNodeLabel(commit: BlockCommit): string {
   return escapeD2String(parts.join("\n"));
 }
 
-interface NodeStyle {
+interface NodeAppearance {
   fill: string;
-  stroke: string;
-  strokeWidth: number;
-  strokeDash?: number;
+  classes: string[];
 }
 
-function makeNodeStyle(commit: BlockCommit): NodeStyle {
-  const style: NodeStyle = {
-    fill: stringToColor(commit.sender),
-    stroke: "#2D3748",
-    strokeWidth: 1,
-    strokeDash: 3,
-  };
-
+function makeNodeAppearance(commit: BlockCommit): NodeAppearance {
+  const classes: string[] = ["CommitNode"];
+  const shouldBeDashed = !commit.won && !commit.canonical;
+  if (shouldBeDashed) {
+    classes.push("CommitDashed");
+  }
   if (commit.won) {
-    style.stroke = "#2B6CB0";
-    style.strokeWidth = 3;
-    style.strokeDash = undefined;
+    classes.push("CommitWon");
   }
-
   if (commit.tip) {
-    style.strokeWidth = Math.max(style.strokeWidth, 4);
+    classes.push("CommitTip");
   }
-
-  if (commit.canonical) {
-    style.strokeDash = undefined;
-  }
-
   if (commit.nextTip) {
-    style.stroke = "#38A169";
+    classes.push("CommitNextTip");
   }
 
-  return style;
+  return {
+    classes,
+    fill: stringToColor(commit.sender),
+  };
 }
 
-interface EdgeStyle {
-  stroke: string;
-  strokeWidth: number;
-  strokeDash?: string;
+interface EdgeAppearance {
+  classes: string[];
 }
 
-function makeEdgeStyle(
+function makeEdgeAppearance(
   commit: BlockCommit,
   parentCommit: BlockCommit,
   lastHeight: number,
-): EdgeStyle {
-  const style: EdgeStyle = {
-    stroke: "#4A5568",
-    strokeWidth: 1,
-    strokeDash: undefined,
-  };
-
+): EdgeAppearance {
+  const classes: string[] = ["CommitEdge"];
   if (lastHeight > 0 && parentCommit.burnBlockHeight !== lastHeight) {
-    style.stroke = "#E53E3E";
-    style.strokeWidth = 3;
+    classes.push("CommitEdgeFork");
   }
-
   if (commit.canonical) {
-    style.stroke = "#3182CE";
-    style.strokeWidth = 4;
-    style.strokeDash = undefined;
+    classes.push("CommitEdgeCanonical");
   }
+  return { classes };
+}
 
-  return style;
+const D2_CLASS_DEFINITIONS = [
+  "classes: {",
+  "CommitNode {",
+  "  style: {",
+  '    stroke: "#2D3748"',
+  "    stroke-width: 1",
+  "    font: mono",
+  "    font-size: 24",
+  "    bold: false",
+  "  }",
+  "}",
+  "",
+  "CommitDashed {",
+  "  style: {",
+  '    stroke-dash: "3"',
+  "  }",
+  "}",
+  "",
+  "CommitWon {",
+  "  style: {",
+  '    stroke: "#2B6CB0"',
+  "    stroke-width: 3",
+  "  }",
+  "}",
+  "",
+  "CommitTip {",
+  "  style: {",
+  "    stroke-width: 4",
+  "  }",
+  "}",
+  "",
+  "CommitNextTip {",
+  "  style: {",
+  '    stroke: "#38A169"',
+  "  }",
+  "}",
+  "",
+  "CommitEdge {",
+  "  style: {",
+  '    stroke: "#4A5568"',
+  "    stroke-width: 1",
+  "  }",
+  "}",
+  "",
+  "CommitEdgeFork {",
+  "  style: {",
+  '    stroke: "#E53E3E"',
+  "    stroke-width: 3",
+  "  }",
+  "}",
+  "",
+  "CommitEdgeCanonical {",
+  "  style: {",
+  '    stroke: "#3182CE"',
+  "    stroke-width: 4",
+  "  }",
+  "}",
+  "",
+  "BlockGroup {",
+  "  style: {",
+  '    fill: "#F7FAFC"',
+  '    stroke: "#CBD5E0"',
+  "  }",
+  "}",
+  "}",
+];
+
+function formatClassList(classes: string[]): string {
+  if (classes.length === 1) {
+    return classes[0];
+  }
+  return `[${classes.join("; ")}]`;
 }
 
 export function generateD2(
@@ -418,7 +471,7 @@ export function generateD2(
   startBlock: number,
   blockCommits: BlockCommits,
 ): string {
-  const lines: string[] = ["direction: down", ""];
+  const lines: string[] = ["direction: down", "", ...D2_CLASS_DEFINITIONS, ""];
   const edgeLines: string[] = [];
 
   let lastHeight = 0;
@@ -438,7 +491,7 @@ export function generateD2(
           blockCommits.sortitionFeesMap.get(commit.sortitionId) ?? 0;
       }
 
-      const nodeStyle = makeNodeStyle(commit);
+      const nodeAppearance = makeNodeAppearance(commit);
       const label = buildNodeLabel(commit);
       const nodeName = `commit_${commit.txid}`;
       const blockName = `block_${commit.burnBlockHeight}`;
@@ -447,47 +500,38 @@ export function generateD2(
         : `https://mempool.space/tx/${commit.txid}`;
 
       nodeLines.push(`  ${nodeName}: {`);
+      nodeLines.push(`    class: ${formatClassList(nodeAppearance.classes)}`);
       nodeLines.push(`    label: "${label}"`);
       nodeLines.push(`    link: "${link}"`);
       nodeLines.push(`    style: {`);
-      nodeLines.push(`      fill: "${nodeStyle.fill}"`);
-      nodeLines.push(`      stroke: "${nodeStyle.stroke}"`);
-      nodeLines.push(`      stroke-width: ${nodeStyle.strokeWidth}`);
-      if (nodeStyle.strokeDash) {
-        nodeLines.push(`      stroke-dash: "${nodeStyle.strokeDash}"`);
-      }
+      nodeLines.push(`      fill: "${nodeAppearance.fill}"`);
       nodeLines.push(`    }`);
       nodeLines.push(`  }`);
 
       if (commit.parent) {
         const parentCommit = blockCommits.allCommits.get(commit.parent);
         if (parentCommit) {
-          const edgeStyle = makeEdgeStyle(commit, parentCommit, lastHeight);
+          const edgeAppearance = makeEdgeAppearance(
+            commit,
+            parentCommit,
+            lastHeight,
+          );
           const source = `block_${parentCommit.burnBlockHeight}.commit_${parentCommit.txid}`;
           const target = `${blockName}.${nodeName}`;
           edgeLines.push(`${source} -> ${target}: {`);
-          edgeLines.push(`  style: {`);
-          edgeLines.push(`    stroke: "${edgeStyle.stroke}"`);
-          edgeLines.push(`    stroke-width: ${edgeStyle.strokeWidth}`);
-          if (edgeStyle.strokeDash) {
-            edgeLines.push(`    stroke-dash: "${edgeStyle.strokeDash}"`);
-          }
-          edgeLines.push(`  }`);
+          edgeLines.push(`  class: ${formatClassList(edgeAppearance.classes)}`);
           edgeLines.push(`}`);
         }
       }
     }
 
     const label = escapeD2String(
-      `Bitcoin Block ${height}\n💰 ${formatNumber(sortitionSpend / 1000)}K sats`,
+      `₿ ${height}\n💰 ${formatNumber(sortitionSpend / 1000)}K sats`,
     );
 
     lines.push(`block_${height}: {`);
+    lines.push(`  class: BlockGroup`);
     lines.push(`  label: "${label}"`);
-    lines.push(`  style: {`);
-    lines.push(`    fill: "#F7FAFC"`);
-    lines.push(`    stroke: "#CBD5E0"`);
-    lines.push(`  }`);
     lines.push(...nodeLines);
     lines.push(`}`);
     lines.push("");

@@ -156,7 +156,7 @@ export function initializeSnapshotScheduler() {
   runSnapshotGeneration();
   console.timeEnd("[startup] initial-snapshot");
 
-  new Cron("*/2 * * * *", () => {
+  new Cron("*/4 * * * *", () => {
     console.log("[scheduler] Triggering miner snapshot refresh");
     runSnapshotGeneration();
   });
