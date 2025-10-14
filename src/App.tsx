@@ -130,7 +130,7 @@ function useMinerPower(): MinerPowerState {
 }
 
 function DiagramView({ state }: { state: VizState }) {
-  const ENABLE_PAN_ZOOM = false; // flip to true when you want it back
+  const ENABLE_PAN_ZOOM = true; // flip to true when you want it back
   const containerRef = useRef<HTMLDivElement | null>(null);
   const panzoomRef = useRef<PanZoom | null>(null);
 

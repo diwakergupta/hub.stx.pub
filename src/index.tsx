@@ -3,6 +3,7 @@ import { serve } from "bun";
 import index from "./index.html";
 import { getStacksDataDir } from "./server/env";
 import { loadLatestSnapshot } from "./server/snapshot-store";
+import { applyD2ClassDefinitions } from "./server/miner-viz";
 
 const configuredDataDir = getStacksDataDir();
 let snapshotWorker: Worker | null = null;
@@ -78,8 +79,10 @@ const server = serve({
           { status: 503 },
         );
       }
+      const d2Source = applyD2ClassDefinitions(snapshot.minerViz.d2Source);
       return Response.json({
         ...snapshot.minerViz,
+        d2Source,
         description: "Stacks miner commits across recent Bitcoin blocks.",
       });
     },

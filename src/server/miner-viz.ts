@@ -392,72 +392,70 @@ function makeEdgeAppearance(
   return { classes };
 }
 
-const D2_CLASS_DEFINITIONS = [
-  "classes: {",
-  "CommitNode {",
-  "  style: {",
-  '    stroke: "#2D3748"',
-  "    stroke-width: 1",
-  "    font: mono",
-  "    font-size: 24",
-  "    bold: false",
-  "  }",
-  "}",
-  "",
-  "CommitDashed {",
-  "  style: {",
-  '    stroke-dash: "3"',
-  "  }",
-  "}",
-  "",
-  "CommitWon {",
-  "  style: {",
-  '    stroke: "#2B6CB0"',
-  "    stroke-width: 3",
-  "  }",
-  "}",
-  "",
-  "CommitTip {",
-  "  style: {",
-  "    stroke-width: 4",
-  "  }",
-  "}",
-  "",
-  "CommitNextTip {",
-  "  style: {",
-  '    stroke: "#38A169"',
-  "  }",
-  "}",
-  "",
-  "CommitEdge {",
-  "  style: {",
-  '    stroke: "#4A5568"',
-  "    stroke-width: 1",
-  "  }",
-  "}",
-  "",
-  "CommitEdgeFork {",
-  "  style: {",
-  '    stroke: "#E53E3E"',
-  "    stroke-width: 3",
-  "  }",
-  "}",
-  "",
-  "CommitEdgeCanonical {",
-  "  style: {",
-  '    stroke: "#3182CE"',
-  "    stroke-width: 4",
-  "  }",
-  "}",
-  "",
-  "BlockGroup {",
-  "  style: {",
-  '    fill: "#F7FAFC"',
-  '    stroke: "#CBD5E0"',
-  "  }",
-  "}",
-  "}",
-];
+export const D2_CLASS_DEFINITIONS = `classes: {
+CommitNode {
+  style: {
+    stroke: "#2D3748"
+    stroke-width: 1
+    font: mono
+    font-size: 28
+    bold: false
+  }
+}
+
+CommitDashed {
+  style: {
+    stroke-dash: "3"
+  }
+}
+
+CommitWon {
+  style: {
+    stroke: "#2B6CB0"
+    stroke-width: 3
+  }
+}
+
+CommitTip {
+  style: {
+    stroke-width: 4
+  }
+}
+
+CommitNextTip {
+  style: {
+    stroke: "#38A169"
+  }
+}
+
+CommitEdge {
+  style: {
+    stroke: "#4A5568"
+    stroke-width: 1
+  }
+}
+
+CommitEdgeFork {
+  style: {
+    stroke: "#E53E3E"
+    stroke-width: 3
+  }
+}
+
+CommitEdgeCanonical {
+  style: {
+    stroke: "#3182CE"
+    stroke-width: 4
+  }
+}
+
+BlockGroup {
+  style: {
+    fill: "#F7FAFC"
+    stroke: "#CBD5E0"
+  }
+}
+}`;
 
 function formatClassList(classes: string[]): string {
   if (classes.length === 1) {
@@ -466,12 +464,29 @@ function formatClassList(classes: string[]): string {
   return `[${classes.join("; ")}]`;
 }
 
+export function applyD2ClassDefinitions(source: string): string {
+  if (source.includes("classes")) {
+    return source;
+  }
+
+  const normalized = source.replace(/\r\n/g, "\n");
+  const [firstLine = "", ...rest] = normalized.split("\n");
+  const classBlock = D2_CLASS_DEFINITIONS.trim();
+
+  if (firstLine.startsWith("direction:")) {
+    const body = rest.join("\n").trimStart();
+    return `${firstLine}\n\n${classBlock}\n\n${body}`;
+  }
+
+  return `${classBlock}\n\n${normalized.trimStart()}`;
+}
+
 export function generateD2(
   lowerBound: number,
   startBlock: number,
   blockCommits: BlockCommits,
 ): string {
-  const lines: string[] = ["direction: down", "", ...D2_CLASS_DEFINITIONS, ""];
+  const lines: string[] = ["direction: down", ""];
   const edgeLines: string[] = [];
 
   let lastHeight = 0;
