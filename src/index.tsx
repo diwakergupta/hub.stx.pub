@@ -2,8 +2,9 @@ import { serve } from "bun";
 
 import index from "./index.html";
 import { getStacksDataDir } from "./server/env";
-import { loadLatestSnapshot } from "./server/snapshot-store";
 import { applyD2ClassDefinitions } from "./server/miner-viz";
+import { fetchRecentBlocks } from "./server/blocks";
+import { loadLatestSnapshot } from "./server/snapshot-store";
 
 const configuredDataDir = getStacksDataDir();
 let snapshotWorker: Worker | null = null;
@@ -39,6 +40,7 @@ const htmlHeaders = {
 const server = serve({
   routes: {
     "/": index,
+    "/blocks": index,
 
     "/api/miners/power": () => {
       const dataDir = getStacksDataDir();
@@ -85,6 +87,20 @@ const server = serve({
         d2Source,
         description: "Stacks miner commits across recent Bitcoin blocks.",
       });
+    },
+
+    "/api/blocks": () => {
+      const dataDir = getStacksDataDir();
+      if (!dataDir) {
+        console.warn("[api] STACKS_DATA_DIR not configured; failing request");
+        return Response.json(
+          { error: "STACKS_DATA_DIR is not configured" },
+          { status: 500 },
+        );
+      }
+
+      const blocks = fetchRecentBlocks({ dataDir, windowSize: 20 });
+      return Response.json({ blocks });
     },
   },
 
