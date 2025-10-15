@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Chart, useChart } from "@chakra-ui/charts";
 import {
   Box,
+  Button,
   Container,
   Flex,
   Heading,
@@ -13,11 +14,14 @@ import {
   Legend,
   Line,
   LineChart,
+  ReferenceArea,
   ReferenceLine,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+
+import type { CategoricalChartState } from "recharts/types/chart/generateCategoricalChart";
 
 import type { BlockSample, BlocksResponse } from "@/shared/blocks";
 
@@ -175,9 +179,10 @@ const COST_MAX = {
 function ChartCard(props: {
   title: string;
   description?: string;
+  actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
-  const { title, description, children } = props;
+  const { title, description, actions, children } = props;
   return (
     <Stack
       borderWidth="1px"
@@ -188,9 +193,17 @@ function ChartCard(props: {
       gap={4}
     >
       <Stack spacing={1}>
-        <Heading as="h3" size="md">
-          {title}
-        </Heading>
+        <Flex
+          align={{ base: "flex-start", md: "center" }}
+          justify="space-between"
+          gap={2}
+          wrap="wrap"
+        >
+          <Heading as="h3" size="md">
+            {title}
+          </Heading>
+          {actions}
+        </Flex>
         {description ? (
           <Text fontSize="sm" color="gray.500">
             {description}
@@ -210,6 +223,82 @@ function normaliseCostVector(source: CostVector, limits: typeof COST_MAX) {
     writeCountPct: (100 * source.writeCount) / limits.writeCount,
     runtimePct: (100 * source.runtime) / limits.runtime,
   };
+}
+
+interface ZoomState {
+  domain: [number, number] | null;
+  refLeft: number | null;
+  refRight: number | null;
+}
+
+function useHighlightZoom(initialDomain: [number, number] | null) {
+  const [{ domain, refLeft, refRight }, setState] = useState<ZoomState>(() => ({
+    domain: null,
+    refLeft: null,
+    refRight: null,
+  }));
+
+  useEffect(() => {
+    setState({ domain: null, refLeft: null, refRight: null });
+  }, [initialDomain?.[0], initialDomain?.[1]]);
+
+  const onMouseDown = useCallback((event: CategoricalChartState | undefined) => {
+    const value = event?.activeLabel;
+    if (typeof value !== "number") return;
+    setState((prev) => ({ ...prev, refLeft: value, refRight: value }));
+  }, []);
+
+  const onMouseMove = useCallback((event: CategoricalChartState | undefined) => {
+    const value = event?.activeLabel;
+    if (typeof value !== "number") return;
+    setState((prev) => {
+      if (prev.refLeft == null) return prev;
+      if (prev.refRight === value) return prev;
+      return { ...prev, refRight: value };
+    });
+  }, []);
+
+  const clampSelection = useCallback((left: number | null, right: number | null) => {
+    if (left == null || right == null) return null;
+    if (left === right) return null;
+    const min = Math.min(left, right);
+    const max = Math.max(left, right);
+    return [min, max] as [number, number];
+  }, []);
+
+  const onMouseUp = useCallback(() => {
+    setState((prev) => {
+      const range = clampSelection(prev.refLeft, prev.refRight);
+      if (!range) {
+        return { ...prev, refLeft: null, refRight: null };
+      }
+      return { domain: range, refLeft: null, refRight: null };
+    });
+  }, [clampSelection]);
+
+  const onMouseLeave = useCallback(() => {
+    setState((prev) => ({ ...prev, refLeft: null, refRight: null }));
+  }, []);
+
+  const reset = useCallback(() => {
+    setState({ domain: null, refLeft: null, refRight: null });
+  }, [initialDomain]);
+
+  const domainValue: [number | "auto", number | "auto"] =
+    domain ?? initialDomain ?? ["auto", "auto"];
+  const referenceArea = clampSelection(refLeft, refRight);
+
+  return {
+    domain: domainValue,
+    referenceArea,
+    hasCustomDomain: domain != null,
+    onMouseDown,
+    onMouseMove,
+    onMouseUp,
+    onMouseLeave,
+    onDoubleClick: reset,
+    reset,
+  } as const;
 }
 
 export function BlocksPage() {
@@ -253,6 +342,17 @@ export function BlocksPage() {
   }, []);
 
   const blocks = state.status === "ready" ? state.blocks : [];
+  const blockDomain = useMemo<[number, number] | null>(() => {
+    if (blocks.length === 0) return null;
+    const first = blocks[0]?.blockHeight ?? null;
+    const last = blocks[blocks.length - 1]?.blockHeight ?? null;
+    if (first == null || last == null) return null;
+    return [Math.min(first, last), Math.max(first, last)];
+  }, [blocks]);
+
+  const costZoom = useHighlightZoom(blockDomain);
+  const tenureZoom = useHighlightZoom(blockDomain);
+  const timestampZoom = useHighlightZoom(blockDomain);
 
   const tenureChangeHeights = useMemo(() => {
     return blocks
@@ -503,10 +603,31 @@ export function BlocksPage() {
         <ChartCard
           title="Block Costs vs Size"
           description="Normalized execution costs across read/write limits alongside on-chain block size."
+          actions={
+            costZoom.hasCustomDomain ? (
+              <Button size="xs" variant="outline" onClick={costZoom.reset}>
+                Reset zoom
+              </Button>
+            ) : null
+          }
         >
           <Chart.Root chart={costChart} h="100%">
-            <LineChart data={costChart.data} margin={{ left: 16, right: 16 }}>
-              <XAxis dataKey="blockHeight" />
+            <LineChart
+              data={costChart.data}
+              margin={{ left: 16, right: 16 }}
+              onMouseDown={costZoom.onMouseDown}
+              onMouseMove={costZoom.onMouseMove}
+              onMouseUp={costZoom.onMouseUp}
+              onMouseLeave={costZoom.onMouseLeave}
+              onDoubleClick={costZoom.onDoubleClick}
+              style={{ cursor: costZoom.referenceArea ? "crosshair" : costZoom.hasCustomDomain ? "grab" : "default" }}
+            >
+              <XAxis
+                dataKey="blockHeight"
+                type="number"
+                domain={costZoom.domain}
+                allowDataOverflow
+              />
               <YAxis
                 yAxisId="cost"
                 tickFormatter={(value: number) =>
@@ -536,6 +657,16 @@ export function BlocksPage() {
                 }
               />
               <Legend content={<Chart.Legend />} />
+              {costZoom.referenceArea ? (
+                <ReferenceArea
+                  x1={costZoom.referenceArea[0]}
+                  x2={costZoom.referenceArea[1]}
+                  y1="auto"
+                  y2="auto"
+                  strokeOpacity={0}
+                  fill="rgba(66, 153, 225, 0.18)"
+                />
+              ) : null}
               {tenureChangeHeights.map((height) => (
                 <ReferenceLine
                   key={`tenure-${height}`}
@@ -569,10 +700,31 @@ export function BlocksPage() {
         <ChartCard
           title="Tenure Costs vs Fees"
           description="Normalized tenure-level costs paired with tenure transaction fees denominated in STX."
+          actions={
+            tenureZoom.hasCustomDomain ? (
+              <Button size="xs" variant="outline" onClick={tenureZoom.reset}>
+                Reset zoom
+              </Button>
+            ) : null
+          }
         >
           <Chart.Root chart={tenureChart} h="100%">
-            <LineChart data={tenureChart.data} margin={{ left: 16, right: 16 }}>
-              <XAxis dataKey="blockHeight" />
+            <LineChart
+              data={tenureChart.data}
+              margin={{ left: 16, right: 16 }}
+              onMouseDown={tenureZoom.onMouseDown}
+              onMouseMove={tenureZoom.onMouseMove}
+              onMouseUp={tenureZoom.onMouseUp}
+              onMouseLeave={tenureZoom.onMouseLeave}
+              onDoubleClick={tenureZoom.onDoubleClick}
+              style={{ cursor: tenureZoom.referenceArea ? "crosshair" : tenureZoom.hasCustomDomain ? "grab" : "default" }}
+            >
+              <XAxis
+                dataKey="blockHeight"
+                type="number"
+                domain={tenureZoom.domain}
+                allowDataOverflow
+              />
               <YAxis
                 yAxisId="cost"
                 tickFormatter={(value: number) =>
@@ -605,6 +757,16 @@ export function BlocksPage() {
                 }
               />
               <Legend content={<Chart.Legend />} />
+              {tenureZoom.referenceArea ? (
+                <ReferenceArea
+                  x1={tenureZoom.referenceArea[0]}
+                  x2={tenureZoom.referenceArea[1]}
+                  y1="auto"
+                  y2="auto"
+                  strokeOpacity={0}
+                  fill="rgba(72, 187, 120, 0.2)"
+                />
+              ) : null}
               {tenureChangeHeights.map((height) => (
                 <ReferenceLine
                   key={`tenure-fees-${height}`}
@@ -635,13 +797,33 @@ export function BlocksPage() {
           </Chart.Root>
         </ChartCard>
 
-        <ChartCard title="Block Timestamps">
+        <ChartCard
+          title="Block Timestamps"
+          actions={
+            timestampZoom.hasCustomDomain ? (
+              <Button size="xs" variant="outline" onClick={timestampZoom.reset}>
+                Reset zoom
+              </Button>
+            ) : null
+          }
+        >
           <Chart.Root chart={timestampChart} h="100%">
             <LineChart
               data={timestampChart.data}
               margin={{ left: 16, right: 16, top: 12, bottom: 12 }}
+              onMouseDown={timestampZoom.onMouseDown}
+              onMouseMove={timestampZoom.onMouseMove}
+              onMouseUp={timestampZoom.onMouseUp}
+              onMouseLeave={timestampZoom.onMouseLeave}
+              onDoubleClick={timestampZoom.onDoubleClick}
+              style={{ cursor: timestampZoom.referenceArea ? "crosshair" : timestampZoom.hasCustomDomain ? "grab" : "default" }}
             >
-              <XAxis dataKey="blockHeight" />
+              <XAxis
+                dataKey="blockHeight"
+                type="number"
+                domain={timestampZoom.domain}
+                allowDataOverflow
+              />
               <YAxis
                 tickFormatter={(value: number) =>
                   dateTimeFormatter.format(new Date(value))
@@ -663,6 +845,16 @@ export function BlocksPage() {
                 }
               />
               <Legend content={<Chart.Legend />} />
+              {timestampZoom.referenceArea ? (
+                <ReferenceArea
+                  x1={timestampZoom.referenceArea[0]}
+                  x2={timestampZoom.referenceArea[1]}
+                  y1="auto"
+                  y2="auto"
+                  strokeOpacity={0}
+                  fill="rgba(102, 126, 234, 0.2)"
+                />
+              ) : null}
               {tenureChangeHeights.map((height) => (
                 <ReferenceLine
                   key={`tenure-time-${height}`}
