@@ -1,0 +1,72 @@
+<!doctype html>
+<html data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Stacks Hub · Static</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bulma@1.0.3/css/bulma.min.css"
+    />
+  </head>
+  <body class="has-navbar-fixed-top">
+    <nav
+      class="navbar is-fixed-top"
+      role="navigation"
+      aria-label="main navigation"
+    >
+      <div class="navbar-brand">
+        <a class="navbar-item" href="/static-index">Stacks Hub</a>
+      </div>
+      <div class="navbar-menu">
+        <div class="navbar-start">
+          <a class="navbar-item" href="/static-index">Miners</a>
+          <a class="navbar-item" href="/static-blocks">Blocks</a>
+        </div>
+      </div>
+    </nav>
+    <main class="section">
+      <div class="container">
+        <h1 class="title">Stacks Miner Graph (Static)</h1>
+        <p class="subtitle">
+          Lightweight preview using Bun APIs and client-side D2 rendering.
+        </p>
+        <div class="notification is-danger is-hidden" id="error-box"></div>
+        <div class="box" id="loading-box">
+          <progress class="progress is-small is-info" max="100">
+            Loading
+          </progress>
+          <p>Loading miner data…</p>
+        </div>
+        <div class="box is-hidden" id="snapshot-box">
+          <div class="content">
+            <p>
+              <strong>Bitcoin Block:</strong>
+              <span id="bitcoin-block"></span>
+            </p>
+            <p>
+              <strong>Generated:</strong>
+              <span id="generated-at"></span>
+            </p>
+            <p id="sortition-row" class="is-hidden">
+              <strong>Sortition ID:</strong>
+              <span id="sortition-id"></span>
+            </p>
+            <p id="description"></p>
+          </div>
+          <div
+            id="miner-viz-container"
+            class="viz-container"
+            style="
+              overflow: auto;
+              border: 1px solid #dbdbdb;
+              border-radius: 6px;
+              padding: 1rem;
+            "
+          ></div>
+        </div>
+      </div>
+    </main>
+    <script type="module" src="./index.js"></script>
+  </body>
+</html>
