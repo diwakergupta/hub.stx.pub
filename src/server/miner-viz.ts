@@ -1,7 +1,5 @@
 import { Database, type Statement } from "bun:sqlite";
 
-import { CHAINSTATE_DB_RELATIVE, SORTITION_DB_RELATIVE } from "./paths";
-
 export interface MinerVizSnapshot {
   generatedAt: string;
   bitcoinBlockHeight: number;

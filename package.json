@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "bun --hot src/index.tsx",
     "build": "bun build ./src/index.html --outdir=dist --sourcemap --target=browser --minify --define:process.env.NODE_ENV='\"production\"' --env='BUN_PUBLIC_*'",
-    "start": "NODE_ENV=production bun src/index.tsx"
+    "start": "NODE_ENV=production bun src/index.tsx",
+    "test": "bun test"
   },
   "dependencies": {
     "@chakra-ui/charts": "^3.27.1",
@@ -14,7 +15,6 @@
     "@emotion/react": "^11.14.0",
     "@terrastruct/d2": "^0.1.33",
     "croner": "^9.1.0",
-    "next-themes": "^0.4.6",
     "panzoom": "^9.4.3",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",

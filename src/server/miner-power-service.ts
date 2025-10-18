@@ -1,7 +1,5 @@
 import { Database } from "bun:sqlite";
-
 import type { MinerPowerSnapshot } from "@/shared/miner-power";
-import { CHAINSTATE_DB_RELATIVE, SORTITION_DB_RELATIVE } from "./paths";
 
 export const MINER_POWER_WINDOW = 144;
 

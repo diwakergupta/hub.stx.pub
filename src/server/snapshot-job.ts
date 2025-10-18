@@ -9,14 +9,14 @@ import {
   buildMinerAddressMaps,
   computeMinerPowerSnapshot,
   type MinerAddressMaps,
-} from "./miner-power";
+} from "./miner-power-service";
 import {
   MINER_VIZ_WINDOW,
   computeMinerVizSnapshot,
   type MinerVizSnapshot,
 } from "./miner-viz";
 import { CHAINSTATE_DB_RELATIVE, SORTITION_DB_RELATIVE } from "./paths";
-import { insertSnapshot } from "./snapshot-store";
+import { insertSnapshot, pruneSnapshots } from "./snapshot-store";
 
 let cachedAddressMaps: MinerAddressMaps | null = null;
 let isRunning = false;
@@ -123,6 +123,8 @@ function runSnapshotGeneration() {
       minerPower,
       minerViz,
     });
+
+    pruneSnapshots(dataDir);
 
     console.log(
       `[snapshots] Stored snapshot for Bitcoin block ${start} (sortition ${

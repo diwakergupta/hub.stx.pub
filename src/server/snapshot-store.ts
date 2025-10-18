@@ -37,7 +37,6 @@ function openHubDatabase(dataDir: string, mode: "read" | "write"): Database {
       readonly: true,
       strict: true,
     });
-    db.exec("PRAGMA query_only = true");
     return db;
   }
 
@@ -46,7 +45,8 @@ function openHubDatabase(dataDir: string, mode: "read" | "write"): Database {
     readwrite: true,
     strict: true,
   });
-  db.exec(SNAPSHOT_SCHEMA);
+  db.run("PRAGMA journal_mode=WAL");
+  db.run(SNAPSHOT_SCHEMA);
   return db;
 }
 
@@ -83,7 +83,25 @@ export function insertSnapshot(
   }
 }
 
-export function loadLatestSnapshot(dataDir: string): MinerSnapshotRecord | null {
+export function pruneSnapshots(
+  dataDir: string,
+  maxAgeMs = 1000 * 60 * 60 * 24,
+) {
+  const cutoff = new Date(Date.now() - maxAgeMs).toISOString();
+  const db = openHubDatabase(dataDir, "write");
+  try {
+    const stmt = db.prepare(
+      `DELETE FROM miner_snapshots WHERE generated_at < ?`,
+    );
+    stmt.run(cutoff);
+  } finally {
+    db.close();
+  }
+}
+
+export function loadLatestSnapshot(
+  dataDir: string,
+): MinerSnapshotRecord | null {
   const db = openHubDatabase(dataDir, "read");
   try {
     let row: SnapshotRow | undefined;

@@ -15,7 +15,7 @@ interface BlockRow {
   timestamp: number | null;
 }
 
-function parseCostVector(raw: string | null): CostVector {
+export function parseCostVector(raw: string | null): CostVector {
   if (!raw) {
     return {
       readLength: 0,

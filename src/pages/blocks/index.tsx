@@ -22,7 +22,7 @@ import {
   type MouseHandlerDataParam,
 } from "recharts";
 
-import type { BlockSample, BlocksResponse } from "@/shared/blocks";
+import type { BlockSample, BlocksResponse, CostVector } from "@/shared/blocks";
 
 type BlocksState =
   | { status: "idle" | "loading" }
