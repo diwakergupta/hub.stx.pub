@@ -19,9 +19,8 @@ import {
   Tooltip,
   XAxis,
   YAxis,
+  type MouseHandlerDataParam,
 } from "recharts";
-
-import type { CategoricalChartState } from "recharts/types/chart/generateCategoricalChart";
 
 import type { BlockSample, BlocksResponse } from "@/shared/blocks";
 
@@ -148,25 +147,12 @@ const CDF_SERIES = [
   { name: "percentile", label: "Arrival CDF", color: "cyan.500" },
 ] as const;
 
-const percentFormatter = new Intl.NumberFormat("en-US", {
-  maximumFractionDigits: 1,
-  minimumFractionDigits: 0,
-});
-const numberFormatter = new Intl.NumberFormat("en-US");
-const secondsFormatter = new Intl.NumberFormat("en-US", {
-  maximumFractionDigits: 1,
-  minimumFractionDigits: 0,
-});
-const stxFormatter = new Intl.NumberFormat("en-US", {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 2,
-});
-const dateTimeFormatter = new Intl.DateTimeFormat("en-US", {
+const datetimeFormatOptions: Intl.DateTimeFormatOptions = {
   month: "short",
   day: "numeric",
   hour: "numeric",
   minute: "2-digit",
-});
+};
 
 const COST_MAX = {
   readLength: 100_000_000,
@@ -189,10 +175,10 @@ function ChartCard(props: {
       borderRadius="lg"
       borderColor="gray.200"
       bg="white"
-      p={{ base: 4, md: 6 }}
+      p={{ base: 3, md: 4 }}
       gap={4}
     >
-      <Stack spacing={1}>
+      <Stack>
         <Flex
           align={{ base: "flex-start", md: "center" }}
           justify="space-between"
@@ -210,7 +196,7 @@ function ChartCard(props: {
           </Text>
         ) : null}
       </Stack>
-      <Box h={{ base: "260px", md: "340px" }}>{children}</Box>
+      <Box h={{ base: "300px", md: "400px" }}>{children}</Box>
     </Stack>
   );
 }
@@ -226,29 +212,35 @@ function normaliseCostVector(source: CostVector, limits: typeof COST_MAX) {
 }
 
 interface ZoomState {
-  domain: [number, number] | null;
+  xDomain: [number, number] | null;
+  yDomains: Record<string, [number, number]> | null;
   refLeft: number | null;
   refRight: number | null;
 }
 
-function useHighlightZoom(initialDomain: [number, number] | null) {
-  const [{ domain, refLeft, refRight }, setState] = useState<ZoomState>(() => ({
-    domain: null,
+function useHighlightZoom<TData extends { blockHeight: number }>(
+  initialXDomain: [number, number] | null,
+  data: TData[],
+  yAxisKeys: Record<string, string[]>,
+) {
+  const [state, setState] = useState<ZoomState>({
+    xDomain: null,
+    yDomains: null,
     refLeft: null,
     refRight: null,
-  }));
+  });
 
   useEffect(() => {
-    setState({ domain: null, refLeft: null, refRight: null });
-  }, [initialDomain?.[0], initialDomain?.[1]]);
+    setState({ xDomain: null, yDomains: null, refLeft: null, refRight: null });
+  }, [initialXDomain?.[0], initialXDomain?.[1]]);
 
-  const onMouseDown = useCallback((event: CategoricalChartState | undefined) => {
+  const onMouseDown = useCallback((event: MouseHandlerDataParam) => {
     const value = event?.activeLabel;
     if (typeof value !== "number") return;
     setState((prev) => ({ ...prev, refLeft: value, refRight: value }));
   }, []);
 
-  const onMouseMove = useCallback((event: CategoricalChartState | undefined) => {
+  const onMouseMove = useCallback((event: MouseHandlerDataParam) => {
     const value = event?.activeLabel;
     if (typeof value !== "number") return;
     setState((prev) => {
@@ -258,44 +250,90 @@ function useHighlightZoom(initialDomain: [number, number] | null) {
     });
   }, []);
 
-  const clampSelection = useCallback((left: number | null, right: number | null) => {
-    if (left == null || right == null) return null;
-    if (left === right) return null;
-    const min = Math.min(left, right);
-    const max = Math.max(left, right);
-    return [min, max] as [number, number];
-  }, []);
-
   const onMouseUp = useCallback(() => {
     setState((prev) => {
-      const range = clampSelection(prev.refLeft, prev.refRight);
-      if (!range) {
+      if (
+        prev.refLeft === null ||
+        prev.refRight === null ||
+        prev.refLeft === prev.refRight
+      ) {
         return { ...prev, refLeft: null, refRight: null };
       }
-      return { domain: range, refLeft: null, refRight: null };
-    });
-  }, [clampSelection]);
+      const newXDomain: [number, number] = [
+        Math.min(prev.refLeft, prev.refRight),
+        Math.max(prev.refLeft, prev.refRight),
+      ];
 
-  const onMouseLeave = useCallback(() => {
-    setState((prev) => ({ ...prev, refLeft: null, refRight: null }));
-  }, []);
+      const visibleData = data.filter(
+        (d) => d.blockHeight >= newXDomain[0] && d.blockHeight <= newXDomain[1],
+      );
+
+      const newYDomains: Record<string, [number, number]> = {};
+
+      if (visibleData.length > 0) {
+        for (const yAxisId in yAxisKeys) {
+          const keys = yAxisKeys[yAxisId];
+          let min = Infinity;
+          let max = -Infinity;
+
+          for (const item of visibleData) {
+            for (const key of keys) {
+              const value = item[key as keyof TData];
+              if (typeof value === "number") {
+                if (value < min) min = value;
+                if (value > max) max = value;
+              }
+            }
+          }
+
+          if (min !== Infinity && max !== -Infinity) {
+            const padding = (max - min) * 0.05 || 1;
+            newYDomains[yAxisId] = [min - padding, max + padding];
+          }
+        }
+      }
+
+      return {
+        xDomain: newXDomain,
+        yDomains: newYDomains,
+        refLeft: null,
+        refRight: null,
+      };
+    });
+  }, [data, yAxisKeys]);
 
   const reset = useCallback(() => {
-    setState({ domain: null, refLeft: null, refRight: null });
-  }, [initialDomain]);
+    setState({ xDomain: null, yDomains: null, refLeft: null, refRight: null });
+  }, []);
 
-  const domainValue: [number | "auto", number | "auto"] =
-    domain ?? initialDomain ?? ["auto", "auto"];
-  const referenceArea = clampSelection(refLeft, refRight);
+  const xDomainValue: [number | "auto", number | "auto"] = state.xDomain ??
+    initialXDomain ?? ["auto", "auto"];
+
+  const getYDomain = useCallback(
+    (yAxisId: string): [number | "auto", number | "auto"] => {
+      return state.yDomains?.[yAxisId] ?? ["auto", "auto"];
+    },
+    [state.yDomains],
+  );
+
+  const referenceArea =
+    state.refLeft !== null &&
+    state.refRight !== null &&
+    state.refLeft !== state.refRight
+      ? [
+          Math.min(state.refLeft, state.refRight),
+          Math.max(state.refLeft, state.refRight),
+        ]
+      : null;
 
   return {
-    domain: domainValue,
+    xDomain: xDomainValue,
+    getYDomain,
     referenceArea,
-    hasCustomDomain: domain != null,
+    hasCustomDomain: state.xDomain != null,
     onMouseDown,
     onMouseMove,
     onMouseUp,
-    onMouseLeave,
     onDoubleClick: reset,
     reset,
   } as const;
@@ -349,10 +387,6 @@ export function BlocksPage() {
     if (first == null || last == null) return null;
     return [Math.min(first, last), Math.max(first, last)];
   }, [blocks]);
-
-  const costZoom = useHighlightZoom(blockDomain);
-  const tenureZoom = useHighlightZoom(blockDomain);
-  const timestampZoom = useHighlightZoom(blockDomain);
 
   const tenureChangeHeights = useMemo(() => {
     return blocks
@@ -410,7 +444,6 @@ export function BlocksPage() {
         label: item.label,
         color: item.color,
         yAxisId: item.yAxisId,
-        strokeDasharray: item.strokeDasharray,
       })),
     [],
   );
@@ -422,7 +455,6 @@ export function BlocksPage() {
         label: item.label,
         color: item.color,
         yAxisId: item.yAxisId,
-        strokeDasharray: item.strokeDasharray,
       })),
     [],
   );
@@ -445,6 +477,51 @@ export function BlocksPage() {
         color: item.color,
       })),
     [],
+  );
+
+  const costYAxisKeys = useMemo(() => {
+    const keys: Record<string, string[]> = {};
+    for (const series of costSeries) {
+      const id = series.yAxisId;
+      if (!id) continue;
+      if (!keys[id]) keys[id] = [];
+      keys[id].push(series.name as string);
+    }
+    return keys;
+  }, [costSeries]);
+
+  const tenureYAxisKeys = useMemo(() => {
+    const keys: Record<string, string[]> = {};
+    for (const series of tenureSeries) {
+      const id = series.yAxisId;
+      if (!id) continue;
+      if (!keys[id]) keys[id] = [];
+      keys[id].push(series.name as string);
+    }
+    return keys;
+  }, [tenureSeries]);
+
+  const timestampYAxisKeys = useMemo(() => {
+    const keys: Record<string, string[]> = {};
+    for (const series of timestampSeries) {
+      const id = series.yAxisId;
+      if (!id) continue;
+      if (!keys[id]) keys[id] = [];
+      keys[id].push(series.name as string);
+    }
+    return keys;
+  }, [timestampSeries]);
+
+  const costZoom = useHighlightZoom(blockDomain, costChartData, costYAxisKeys);
+  const tenureZoom = useHighlightZoom(
+    blockDomain,
+    tenureChartData,
+    tenureYAxisKeys,
+  );
+  const timestampZoom = useHighlightZoom(
+    blockDomain,
+    timestampChartData,
+    timestampYAxisKeys,
   );
 
   const costChart = useChart<CostChartDatum>({
@@ -586,11 +663,11 @@ export function BlocksPage() {
 
   return (
     <Container
-      maxW={{ base: "100%", md: "6xl" }}
-      py={{ base: 10, md: 14 }}
-      px={{ base: 4, md: 6 }}
+      maxW={{ base: "100%", md: "8xl" }}
+      py={{ base: 6, md: 8 }}
+      px={0}
     >
-      <Stack gap={10}>
+      <Stack gap={6}>
         <Stack gap={3}>
           <Heading size="2xl">Block Metrics</Heading>
           <Text fontSize="lg" color="gray.500">
@@ -618,52 +695,36 @@ export function BlocksPage() {
               onMouseDown={costZoom.onMouseDown}
               onMouseMove={costZoom.onMouseMove}
               onMouseUp={costZoom.onMouseUp}
-              onMouseLeave={costZoom.onMouseLeave}
               onDoubleClick={costZoom.onDoubleClick}
-              style={{ cursor: costZoom.referenceArea ? "crosshair" : costZoom.hasCustomDomain ? "grab" : "default" }}
+              style={{
+                cursor: costZoom.referenceArea
+                  ? "crosshair"
+                  : costZoom.hasCustomDomain
+                    ? "grab"
+                    : "default",
+              }}
             >
               <XAxis
                 dataKey="blockHeight"
                 type="number"
-                domain={costZoom.domain}
+                domain={costZoom.xDomain}
                 allowDataOverflow
               />
               <YAxis
                 yAxisId="cost"
-                tickFormatter={(value: number) =>
-                  `${percentFormatter.format(value)}%`
-                }
                 width={60}
+                domain={costZoom.getYDomain("cost")}
               />
-              <YAxis
-                yAxisId="size"
-                orientation="right"
-                tickFormatter={(value: number) => numberFormatter.format(value)}
-                width={80}
-              />
-              <Tooltip
-                content={
-                  <Chart.Tooltip
-                    formatter={(value: number, name: string) => {
-                      if (name.includes("bytes")) {
-                        return [numberFormatter.format(value), name] as const;
-                      }
-                      return [
-                        `${percentFormatter.format(value)}%`,
-                        name,
-                      ] as const;
-                    }}
-                  />
-                }
-              />
+              <YAxis yAxisId="cost" domain={[0, "auto"]} width={60} />
+              <YAxis yAxisId="size" orientation="right" width={80} />
+              <Tooltip content={<Chart.Tooltip />} />
               <Legend content={<Chart.Legend />} />
               {costZoom.referenceArea ? (
                 <ReferenceArea
+                  yAxisId="cost"
                   x1={costZoom.referenceArea[0]}
                   x2={costZoom.referenceArea[1]}
-                  y1="auto"
-                  y2="auto"
-                  strokeOpacity={0}
+                  stroke="transparent"
                   fill="rgba(66, 153, 225, 0.18)"
                 />
               ) : null}
@@ -675,7 +736,6 @@ export function BlocksPage() {
                   stroke={costChart.color("gray.400")}
                   strokeDasharray="4 4"
                   strokeWidth={2}
-                  ifOverflow="extendDomain"
                 />
               ))}
               {costSeries.map((series) => (
@@ -686,11 +746,10 @@ export function BlocksPage() {
                   name={series.label}
                   stroke={costChart.color(series.color)}
                   strokeDasharray={series.strokeDasharray}
-                  strokeWidth={series.yAxisId === "size" ? 2.5 : 1.75}
+                  strokeWidth={1.5}
                   yAxisId={series.yAxisId}
                   dot={false}
                   isAnimationActive={false}
-                  connectNulls
                 />
               ))}
             </LineChart>
@@ -715,55 +774,36 @@ export function BlocksPage() {
               onMouseDown={tenureZoom.onMouseDown}
               onMouseMove={tenureZoom.onMouseMove}
               onMouseUp={tenureZoom.onMouseUp}
-              onMouseLeave={tenureZoom.onMouseLeave}
               onDoubleClick={tenureZoom.onDoubleClick}
-              style={{ cursor: tenureZoom.referenceArea ? "crosshair" : tenureZoom.hasCustomDomain ? "grab" : "default" }}
+              style={{
+                cursor: tenureZoom.referenceArea
+                  ? "crosshair"
+                  : tenureZoom.hasCustomDomain
+                    ? "grab"
+                    : "default",
+              }}
             >
               <XAxis
                 dataKey="blockHeight"
                 type="number"
-                domain={tenureZoom.domain}
+                domain={tenureZoom.xDomain}
                 allowDataOverflow
               />
               <YAxis
                 yAxisId="cost"
-                tickFormatter={(value: number) =>
-                  `${percentFormatter.format(value)}%`
-                }
                 width={60}
+                domain={tenureZoom.getYDomain("cost")}
               />
-              <YAxis
-                yAxisId="fees"
-                orientation="right"
-                tickFormatter={(value: number) => stxFormatter.format(value)}
-                width={80}
-              />
-              <Tooltip
-                content={
-                  <Chart.Tooltip
-                    formatter={(value: number, name: string) => {
-                      if (name.includes("Fees")) {
-                        return [
-                          `${stxFormatter.format(value)} STX`,
-                          name,
-                        ] as const;
-                      }
-                      return [
-                        `${percentFormatter.format(value)}%`,
-                        name,
-                      ] as const;
-                    }}
-                  />
-                }
-              />
+              <YAxis yAxisId="cost" width={60} />
+              <YAxis yAxisId="fees" orientation="right" width={80} />
+              <Tooltip content={<Chart.Tooltip />} />
               <Legend content={<Chart.Legend />} />
               {tenureZoom.referenceArea ? (
                 <ReferenceArea
+                  yAxisId="cost"
                   x1={tenureZoom.referenceArea[0]}
                   x2={tenureZoom.referenceArea[1]}
-                  y1="auto"
-                  y2="auto"
-                  strokeOpacity={0}
+                  stroke="transparent"
                   fill="rgba(72, 187, 120, 0.2)"
                 />
               ) : null}
@@ -775,7 +815,6 @@ export function BlocksPage() {
                   stroke={tenureChart.color("gray.400")}
                   strokeDasharray="4 4"
                   strokeWidth={2}
-                  ifOverflow="extendDomain"
                 />
               ))}
               {tenureSeries.map((series) => (
@@ -786,7 +825,7 @@ export function BlocksPage() {
                   name={series.label}
                   stroke={tenureChart.color(series.color)}
                   strokeDasharray={series.strokeDasharray}
-                  strokeWidth={series.yAxisId === "fees" ? 2.5 : 1.75}
+                  strokeWidth={1.5}
                   yAxisId={series.yAxisId}
                   dot={false}
                   isAnimationActive={false}
@@ -814,44 +853,45 @@ export function BlocksPage() {
               onMouseDown={timestampZoom.onMouseDown}
               onMouseMove={timestampZoom.onMouseMove}
               onMouseUp={timestampZoom.onMouseUp}
-              onMouseLeave={timestampZoom.onMouseLeave}
               onDoubleClick={timestampZoom.onDoubleClick}
-              style={{ cursor: timestampZoom.referenceArea ? "crosshair" : timestampZoom.hasCustomDomain ? "grab" : "default" }}
+              style={{
+                cursor: timestampZoom.referenceArea
+                  ? "crosshair"
+                  : timestampZoom.hasCustomDomain
+                    ? "grab"
+                    : "default",
+              }}
             >
               <XAxis
                 dataKey="blockHeight"
                 type="number"
-                domain={timestampZoom.domain}
+                domain={timestampZoom.xDomain}
                 allowDataOverflow
               />
               <YAxis
-                tickFormatter={(value: number) =>
-                  dateTimeFormatter.format(new Date(value))
-                }
+                yAxisId="time"
+                tickFormatter={timestampChart.formatDate(datetimeFormatOptions)}
                 width={120}
-                domain={timestampDomain}
+                domain={
+                  timestampZoom.hasCustomDomain
+                    ? timestampZoom.getYDomain("time")
+                    : timestampDomain
+                }
               />
               <Tooltip
                 content={
                   <Chart.Tooltip
-                    formatter={(value: number, name: string) => [
-                      dateTimeFormatter.format(new Date(value)),
-                      name,
-                    ]}
-                    labelFormatter={(label: number) =>
-                      `Block ${numberFormatter.format(label)}`
-                    }
+                    formatter={timestampChart.formatDate(datetimeFormatOptions)}
                   />
                 }
               />
               <Legend content={<Chart.Legend />} />
               {timestampZoom.referenceArea ? (
                 <ReferenceArea
+                  yAxisId="time"
                   x1={timestampZoom.referenceArea[0]}
                   x2={timestampZoom.referenceArea[1]}
-                  y1="auto"
-                  y2="auto"
-                  strokeOpacity={0}
+                  stroke="transparent"
                   fill="rgba(102, 126, 234, 0.2)"
                 />
               ) : null}
@@ -859,9 +899,9 @@ export function BlocksPage() {
                 <ReferenceLine
                   key={`tenure-time-${height}`}
                   x={height}
+                  yAxisId="time"
                   stroke={timestampChart.color("gray.400")}
                   strokeDasharray="4 4"
-                  ifOverflow="extendDomain"
                 />
               ))}
               {timestampSeries.map((series) => (
@@ -872,9 +912,9 @@ export function BlocksPage() {
                   name={series.label}
                   stroke={timestampChart.color(series.color)}
                   strokeWidth={2}
+                  yAxisId="time"
                   dot={false}
                   isAnimationActive={false}
-                  connectNulls
                 />
               ))}
             </LineChart>
@@ -897,30 +937,9 @@ export function BlocksPage() {
                 domain={cdfDomain}
                 allowDataOverflow
                 ticks={cdfTicks}
-                tickFormatter={(value: number) =>
-                  `${secondsFormatter.format(value)}s`
-                }
               />
-              <YAxis
-                tickFormatter={(value: number) =>
-                  `${percentFormatter.format(value)}%`
-                }
-                width={60}
-                domain={[0, 100]}
-              />
-              <Tooltip
-                content={
-                  <Chart.Tooltip
-                    formatter={(value: number, name: string) => [
-                      `${percentFormatter.format(value)}%`,
-                      name,
-                    ]}
-                    labelFormatter={(label: number) =>
-                      `${secondsFormatter.format(label)} seconds`
-                    }
-                  />
-                }
-              />
+              <YAxis width={60} domain={[0, 100]} />
+              <Tooltip content={<Chart.Tooltip />} />
               <Legend content={<Chart.Legend />} />
               {cdfSeries.map((series) => (
                 <Line

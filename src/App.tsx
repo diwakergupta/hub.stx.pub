@@ -131,7 +131,7 @@ function useMinerPower(): MinerPowerState {
 }
 
 function DiagramView({ state }: { state: VizState }) {
-  const ENABLE_PAN_ZOOM = true; // flip to true when you want it back
+  const ENABLE_PAN_ZOOM = false; // flip to true when you want it back
   const containerRef = useRef<HTMLDivElement | null>(null);
   const panzoomRef = useRef<PanZoom | null>(null);
 
@@ -522,7 +522,11 @@ function Footer() {
             © {new Date().getFullYear()} Stx.pub · MVP build in progress
           </Text>
           <Stack direction="row" gap={4}>
-            <Link href="https://github.com/stxpub" target="_blank" color="teal.500">
+            <Link
+              href="https://github.com/stxpub"
+              target="_blank"
+              color="teal.500"
+            >
               GitHub
             </Link>
             <Link href="https://d2lang.com" target="_blank" color="teal.500">
@@ -570,10 +574,8 @@ function HomePage() {
 }
 
 export function App() {
-  const path =
-    typeof window !== "undefined" ? window.location.pathname : "/";
-  const isBlocksPage =
-    path === "/blocks" || path.startsWith("/blocks/");
+  const path = typeof window !== "undefined" ? window.location.pathname : "/";
+  const isBlocksPage = path === "/blocks" || path.startsWith("/blocks/");
 
   return (
     <Provider>
