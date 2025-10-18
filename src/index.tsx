@@ -1,9 +1,6 @@
 import { serve } from "bun";
 
 import index from "./index.html";
-import staticIndex from "./static/index.html";
-import staticBlocks from "./static/blocks.html";
-
 import { getStacksDataDir } from "./server/env";
 import { applyD2ClassDefinitions } from "./server/miner-viz";
 import { fetchRecentBlocks } from "./server/blocks";
@@ -44,8 +41,6 @@ const server = serve({
   routes: {
     "/": index,
     "/blocks": index,
-    "/static-index": staticIndex,
-    "/static-blocks": staticBlocks,
 
     "/api/miners/power": () => {
       const dataDir = getStacksDataDir();
