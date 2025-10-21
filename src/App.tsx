@@ -23,7 +23,7 @@ function Header({ currentPath }: { currentPath: string }) {
   return (
     <Box as="header" borderBottomWidth="1px" bg="white">
       <Container
-        maxW={{ base: "100%", md: "6xl" }}
+        maxW={{ base: "100%", md: "8xl" }}
         py={4}
         px={{ base: 4, md: 6 }}
       >
@@ -35,9 +35,6 @@ function Header({ currentPath }: { currentPath: string }) {
         >
           <Stack gap={1}>
             <Heading size="lg">Stacks Hub</Heading>
-            <Text fontSize="sm" color="gray.500">
-              Rebuilt on Bun · Early preview
-            </Text>
           </Stack>
           <Flex
             direction={{ base: "column", md: "row" }}
@@ -67,9 +64,6 @@ function Header({ currentPath }: { currentPath: string }) {
                 );
               })}
             </Stack>
-            <Link href="https://stacks.org" target="_blank" color="teal.500">
-              Stacks.org
-            </Link>
           </Flex>
         </Flex>
       </Container>
@@ -80,32 +74,9 @@ function Header({ currentPath }: { currentPath: string }) {
 function Footer() {
   return (
     <Box as="footer" borderTopWidth="1px" bg="white">
-      <Container
-        maxW={{ base: "100%", md: "6xl" }}
-        py={6}
-        px={{ base: 4, md: 6 }}
-      >
-        <Stack
-          direction={{ base: "column", md: "row" }}
-          justify="space-between"
-          gap={4}
-        >
-          <Text color="gray.500" fontSize="sm">
-            © {new Date().getFullYear()} Stx.pub · MVP build in progress
-          </Text>
-          <Stack direction="row" gap={4}>
-            <Link
-              href="https://github.com/stxpub"
-              target="_blank"
-              color="teal.500"
-            >
-              GitHub
-            </Link>
-            <Link href="https://d2lang.com" target="_blank" color="teal.500">
-              D2 Docs
-            </Link>
-          </Stack>
-        </Stack>
+      <Container maxW={{ base: "100%", md: "6xl" }} p={4}>
+        80% vibe-coded, 20% hand-crafed, 100% with ❤️ by{" "}
+        <Link href="https://diwaker.io">Diwaker</Link>.
       </Container>
     </Box>
   );
@@ -117,7 +88,13 @@ export function App() {
 
   return (
     <Provider>
-      <Flex direction="column" minH="100vh" bg="gray.50">
+      <Flex
+        direction="column"
+        minH="100vh"
+        fontFamily="mono"
+        bg="bg.muted"
+        color="fg.muted"
+      >
         <Header currentPath={path} />
         <Box as="main" flex="1">
           {isBlocksPage ? <BlocksPage /> : <MinersPage />}

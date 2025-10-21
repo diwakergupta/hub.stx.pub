@@ -6,6 +6,7 @@ import {
   Flex,
   Heading,
   Link,
+  List,
   Spinner,
   Stack,
   Table,
@@ -187,7 +188,6 @@ function DiagramView({ state }: { state: VizState }) {
         borderWidth="1px"
         borderRadius="lg"
         borderColor="gray.200"
-        bg="white"
       >
         <Stack align="center">
           <Spinner size="lg" />
@@ -207,7 +207,6 @@ function DiagramView({ state }: { state: VizState }) {
         borderWidth="1px"
         borderRadius="lg"
         borderColor="gray.200"
-        bg="white"
         p={6}
       >
         <Heading as="h3" size="md">
@@ -226,28 +225,46 @@ function DiagramView({ state }: { state: VizState }) {
       borderWidth="1px"
       borderRadius="lg"
       borderColor="gray.200"
-      bg="white"
       width="100%"
       p={{ base: 4, md: 6, lg: 8 }}
       gap={{ base: 4, md: 6 }}
     >
       <Stack>
-        <Heading as="h3" size="md">
-          Latest Diagram
+        <Heading as="h2" size="lg">
+          Visualizing Block Commits
         </Heading>
         <Text fontSize="sm" color="gray.500">
           Bitcoin block height{" "}
           {state.payload.bitcoinBlockHeight.toLocaleString()} · Updated{" "}
           {new Date(state.payload.generatedAt).toLocaleString()}
         </Text>
-        {state.payload.sortitionId && (
-          <Text fontSize="sm" color="gray.500">
-            Sortition ID {state.payload.sortitionId}
-          </Text>
-        )}
-        <Text fontSize="sm" color="gray.500">
-          {state.payload.description}
+        <Text>
+          This is a visualization of the Stacks chain, from the perspective of
+          the block commits broadcast by Stacks miners on Bitcoin.
         </Text>
+        <List.Root fontSize="sm">
+          <List.Item>
+            Each "row" or "cluster" represents commits at a given Bitcoin block.
+            The label links to the corresponding block on mempool.space
+          </List.Item>
+          <List.Item>
+            Each block commit node links to the corresponding Bitcoin
+            transaction.
+          </List.Item>
+          <List.Item>
+            Winning commits are solid, the rest are dashed. For winning commits,
+            the node links to the corresponding Stacks block instead.
+          </List.Item>
+          <List.Item>
+            Red edges indicate blocks building on top of non-canonical tips
+            (indicating forks)
+          </List.Item>
+          <List.Item>
+            Block commits from the same miner have the same fill color. The
+            algorithm is rudimentary: I cast the first 8 bytes of the address to
+            an int, and then modulo that into a fixed set of colors.
+          </List.Item>
+        </List.Root>
       </Stack>
 
       <Box
@@ -255,7 +272,6 @@ function DiagramView({ state }: { state: VizState }) {
         borderRadius="md"
         overflow={ENABLE_PAN_ZOOM ? "hidden" : "auto"}
         borderColor="gray.100"
-        bg="white"
         ref={containerRef}
         minH={{ base: "65vh", md: "78vh", lg: "82vh" }}
         maxH={ENABLE_PAN_ZOOM ? "95vh" : undefined}
@@ -280,7 +296,7 @@ function MinerPowerView({ state }: { state: MinerPowerState }) {
         borderWidth="1px"
         borderRadius="lg"
         borderColor="gray.200"
-        bg="white"
+        bg="bg.muted"
       >
         <Stack align="center">
           <Spinner size="lg" />
@@ -312,6 +328,9 @@ function MinerPowerView({ state }: { state: MinerPowerState }) {
     );
   }
 
+  // This check is redundant, but it helps TypeScript narrow down the type of `state`
+  if (state.status !== "ready") return null;
+
   const numberFmt = new Intl.NumberFormat("en-US");
   const percentFmt = new Intl.NumberFormat("en-US", {
     style: "percent",
@@ -326,13 +345,7 @@ function MinerPowerView({ state }: { state: MinerPowerState }) {
   const { payload } = state;
 
   return (
-    <Stack
-      borderWidth="1px"
-      borderRadius="lg"
-      borderColor="gray.200"
-      bg="white"
-      p={6}
-    >
+    <Stack borderWidth="1px" borderRadius="lg" borderColor="gray.200" p={4}>
       <Stack
         direction={{ base: "column", md: "row" }}
         justify="space-between"
@@ -343,12 +356,11 @@ function MinerPowerView({ state }: { state: MinerPowerState }) {
             Miner Power · Last {payload.windowSize} Blocks
           </Heading>
           <Text fontSize="sm" color="gray.500">
-            Updated {new Date(payload.generatedAt).toLocaleString()}
+            Last Updated {new Date(payload.generatedAt).toLocaleString()}
           </Text>
         </Stack>
         <Stack
-          spacing={0}
-          fontSize="xs"
+          fontSize="sm"
           color="gray.500"
           align={{ base: "flex-start", md: "flex-end" }}
         >
@@ -362,11 +374,10 @@ function MinerPowerView({ state }: { state: MinerPowerState }) {
       <Table.ScrollArea
         borderWidth="1px"
         borderRadius="md"
-        overflow="hidden"
         borderColor="gray.100"
       >
-        <Table.Root size="sm" variant="striped">
-          <Table.Header bg="gray.50">
+        <Table.Root size="md" striped colorPalette="teal">
+          <Table.Header>
             <Table.Row>
               <Table.ColumnHeader>Miner</Table.ColumnHeader>
               <Table.ColumnHeader textAlign="end">
@@ -394,18 +405,12 @@ function MinerPowerView({ state }: { state: MinerPowerState }) {
                       <Link
                         href={explorerUrl}
                         target="_blank"
-                        color="teal.500"
                         fontWeight="medium"
                       >
                         {miner.stacksRecipient}
                       </Link>
                       {btcUrl && (
-                        <Link
-                          href={btcUrl}
-                          target="_blank"
-                          fontSize="xs"
-                          color="gray.500"
-                        >
+                        <Link href={btcUrl} target="_blank" fontSize="xs">
                           {miner.bitcoinAddress}
                         </Link>
                       )}
@@ -437,27 +442,15 @@ export function MinersPage() {
   const vizState = useMinerViz();
   const minerPowerState = useMinerPower();
 
-  const heroCopy = useMemo(
-    () => ({
-      title: "Stacks Miner Graph (MVP)",
-      subtitle:
-        "A Bun-powered preview of the block commit visualization rebuilt with React and Chakra UI.",
-    }),
-    [],
-  );
-
   return (
     <Container
       maxW={{ base: "100%", md: "8xl" }}
       py={{ base: 8, md: 12 }}
       px={{ base: 4, md: 6 }}
     >
-      <Stack gap={10}>
-        <Stack gap={4}>
-          <Heading size="2xl">{heroCopy.title}</Heading>
-          <Text fontSize="lg" color="gray.500">
-            {heroCopy.subtitle}
-          </Text>
+      <Stack gap={2}>
+        <Stack gap={2}>
+          <Heading size="2xl">Stacks Miners</Heading>
         </Stack>
 
         <MinerPowerView state={minerPowerState} />
