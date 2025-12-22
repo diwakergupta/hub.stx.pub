@@ -665,7 +665,7 @@ export function BlocksPage() {
     <Container
       maxW={{ base: "100%", md: "8xl" }}
       py={{ base: 6, md: 8 }}
-      px={0}
+      px={4}
     >
       <Stack gap={6}>
         <Stack gap={3}>

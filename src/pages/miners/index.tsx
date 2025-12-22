@@ -445,7 +445,7 @@ export function MinersPage() {
   return (
     <Container
       maxW={{ base: "100%", md: "8xl" }}
-      py={{ base: 8, md: 12 }}
+      py={{ base: 4, md: 6 }}
       px={{ base: 4, md: 6 }}
     >
       <Stack gap={2}>
