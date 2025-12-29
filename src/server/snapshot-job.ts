@@ -150,7 +150,7 @@ export function initializeSnapshotScheduler() {
   }
 
   console.log(
-    "[startup] Initializing miner snapshot scheduler (interval: 2 minutes)",
+    "[startup] Initializing miner snapshot scheduler (interval: 4 minutes)",
   );
 
   // Prime address map and snapshot table immediately
@@ -158,7 +158,7 @@ export function initializeSnapshotScheduler() {
   runSnapshotGeneration();
   console.timeEnd("[startup] initial-snapshot");
 
-  new Cron("*/4 * * * *", () => {
+  new Cron("*/1 * * * *", () => {
     console.time("[scheduler] Triggering miner snapshot refresh");
     runSnapshotGeneration();
     console.timeEnd("[scheduler] Finished miner snapshot refresh");

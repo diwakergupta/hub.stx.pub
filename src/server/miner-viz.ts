@@ -329,7 +329,7 @@ function formatNumber(value: number): string {
 }
 
 function buildNodeLabel(commit: BlockCommit): string {
-  const memo = commit.memo ? `memo: ${escapeDotString(commit.memo)}` : "";
+  const memo = commit.memo ? `📋 ${escapeDotString(commit.memo)}\\l` : "";
   const parts = [
     `⛏️ ${normalizeSender(commit.sender)}`,
     `🔗 ${commit.stacksHeight}`,
@@ -339,7 +339,7 @@ function buildNodeLabel(commit: BlockCommit): string {
     parts.push(memo);
   }
   // Use HTML-like labels for formatting if needed, but simple string is safer/easier for now
-  return parts.join("\\n");
+  return parts.join("\\l");
 }
 
 export function generateDot(
@@ -355,8 +355,8 @@ export function generateDot(
     "digraph G {",
     //    '  graph [rankdir=TB, newrank=true, compound=true, splines=polyline, nodesep=0.2, ranksep=0.4, bgcolor="#FFFFFF"];',
     // ratio=compress, fontsize=28, fontname=monospace
-    "  graph [rankdir=TB];",
-    '  node [shape=component, style="filled,dashed,rounded", fontname="sans-serif", penwidth=1, margin="0.2,0.2"];',
+    "  graph [rankdir=TB, fontname=monospace];",
+    '  node [shape=component, fontname=monospace, style="filled,dashed,rounded", penwidth=1, margin="0.5,0.2"];',
     '  edge [penwidth=1.5, color="#718096", arrowsize=0.8];',
   ];
 
@@ -375,9 +375,6 @@ export function generateDot(
     lines.push('    color="#E2E8F0";');
     lines.push('    fillcolor="#F7FAFC";');
     lines.push("    margin=8;");
-    lines.push(
-      '    node [shape=component, style="filled,rounded", fillcolor="white"];',
-    );
 
     for (const commit of commits) {
       if (sortitionSpend === 0) {
@@ -416,7 +413,7 @@ export function generateDot(
       );
     }
 
-    const clusterLabel = `₿ ${height}\\n💰 ${formatNumber(sortitionSpend / 1000)}K sats`;
+    const clusterLabel = `₿ ${height}\\l💰 ${formatNumber(sortitionSpend / 1000)}K sats\\l`;
     lines.push(`    label="${clusterLabel}";`);
     lines.push("  }"); // End subgraph
   }
