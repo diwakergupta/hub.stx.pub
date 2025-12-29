@@ -4,7 +4,7 @@ export interface MinerVizSnapshot {
   generatedAt: string;
   bitcoinBlockHeight: number;
   sortitionId: string | null;
-  d2Source: string;
+  dotSource: string;
 }
 
 export const MINER_VIZ_WINDOW = 20;
@@ -320,11 +320,8 @@ function stringToColor(input: string): string {
   return pastelColors[index];
 }
 
-function escapeD2String(value: string): string {
-  return value
-    .replace(/\\/g, "\\\\")
-    .replace(/"/g, '\\"')
-    .replace(/\n/g, "\\n");
+function escapeDotString(value: string): string {
+  return value.replace(/"/g, '\\"');
 }
 
 function formatNumber(value: number): string {
@@ -332,162 +329,36 @@ function formatNumber(value: number): string {
 }
 
 function buildNodeLabel(commit: BlockCommit): string {
-  const memo = commit.memo ? `\nmemo: ${commit.memo}` : "";
+  const memo = commit.memo ? `memo: ${escapeDotString(commit.memo)}` : "";
   const parts = [
     `⛏️ ${normalizeSender(commit.sender)}`,
     `🔗 ${commit.stacksHeight}`,
     `💸 ${formatNumber(commit.spend / 1000)}K sats`,
   ];
   if (memo) {
-    parts.push(memo.trimStart());
+    parts.push(memo);
   }
-  return escapeD2String(parts.join("\n"));
+  // Use HTML-like labels for formatting if needed, but simple string is safer/easier for now
+  return parts.join("\\n");
 }
 
-interface NodeAppearance {
-  fill: string;
-  classes: string[];
-}
-
-function makeNodeAppearance(commit: BlockCommit): NodeAppearance {
-  const classes: string[] = ["CommitNode"];
-  const shouldBeDashed = !commit.won && !commit.canonical;
-  if (shouldBeDashed) {
-    classes.push("CommitDashed");
-  }
-  if (commit.won) {
-    classes.push("CommitWon");
-  }
-  if (commit.tip) {
-    classes.push("CommitTip");
-  }
-  if (commit.nextTip) {
-    classes.push("CommitNextTip");
-  }
-
-  return {
-    classes,
-    fill: stringToColor(commit.sender),
-  };
-}
-
-interface EdgeAppearance {
-  classes: string[];
-}
-
-function makeEdgeAppearance(
-  commit: BlockCommit,
-  parentCommit: BlockCommit,
-  lastHeight: number,
-): EdgeAppearance {
-  const classes: string[] = ["CommitEdge"];
-  if (lastHeight > 0 && parentCommit.burnBlockHeight !== lastHeight) {
-    classes.push("CommitEdgeFork");
-  }
-  if (commit.canonical) {
-    classes.push("CommitEdgeCanonical");
-  }
-  return { classes };
-}
-
-export const D2_CLASS_DEFINITIONS = `classes: {
-CommitNode {
-  style: {
-    stroke: "#2D3748"
-    stroke-width: 1
-    font: mono
-    font-size: 28
-    bold: false
-  }
-}
-
-CommitDashed {
-  style: {
-    stroke-dash: "3"
-  }
-}
-
-CommitWon {
-  style: {
-    stroke: "#2B6CB0"
-    stroke-width: 3
-  }
-}
-
-CommitTip {
-  style: {
-    stroke-width: 4
-  }
-}
-
-CommitNextTip {
-  style: {
-    stroke: "#38A169"
-  }
-}
-
-CommitEdge {
-  style: {
-    stroke: "#4A5568"
-    stroke-width: 1
-  }
-}
-
-CommitEdgeFork {
-  style: {
-    stroke: "#E53E3E"
-    stroke-width: 3
-  }
-}
-
-CommitEdgeCanonical {
-  style: {
-    stroke: "#3182CE"
-    stroke-width: 4
-  }
-}
-
-BlockGroup {
-  style: {
-    fill: "#F7FAFC"
-    stroke: "#CBD5E0"
-  }
-}
-}`;
-
-function formatClassList(classes: string[]): string {
-  if (classes.length === 1) {
-    return classes[0];
-  }
-  return `[${classes.join("; ")}]`;
-}
-
-export function applyD2ClassDefinitions(source: string): string {
-  if (source.includes("classes")) {
-    return source;
-  }
-
-  const normalized = source.replace(/\r\n/g, "\n");
-  const [firstLine = "", ...rest] = normalized.split("\n");
-  const classBlock = D2_CLASS_DEFINITIONS.trim();
-
-  if (firstLine.startsWith("direction:")) {
-    const body = rest.join("\n").trimStart();
-    return `${firstLine}\n\n${classBlock}\n\n${body}`;
-  }
-
-  return `${classBlock}\n\n${normalized.trimStart()}`;
-}
-
-export function generateD2(
+export function generateDot(
   lowerBound: number,
   startBlock: number,
   blockCommits: BlockCommits,
 ): string {
-  const lines: string[] = ["direction: down", ""];
-  const edgeLines: string[] = [];
-
-  let lastHeight = 0;
+  // We use "TB" (top to bottom) but since we want latest blocks at the bottom,
+  // we'll rely on the order of subgraphs or rankdir.
+  // Actually, standard timeline is often Left-to-Right or Top-to-Bottom.
+  // Let's stick to standard vertical layout.
+  const lines: string[] = [
+    "digraph G {",
+    //    '  graph [rankdir=TB, newrank=true, compound=true, splines=polyline, nodesep=0.2, ranksep=0.4, bgcolor="#FFFFFF"];',
+    // ratio=compress, fontsize=28, fontname=monospace
+    "  graph [rankdir=TB];",
+    '  node [shape=component, style="filled,dashed,rounded", fontname="sans-serif", penwidth=1, margin="0.2,0.2"];',
+    '  edge [penwidth=1.5, color="#718096", arrowsize=0.8];',
+  ];
 
   for (let height = lowerBound; height <= startBlock; height += 1) {
     const commits = blockCommits.commitsByBlock.get(height);
@@ -498,61 +369,98 @@ export function generateD2(
     let sortitionSpend = 0;
     const nodeLines: string[] = [];
 
+    // Subgraph for the block
+    lines.push(`  subgraph cluster_block_${height} {`);
+    lines.push('    style="filled,rounded";');
+    lines.push('    color="#E2E8F0";');
+    lines.push('    fillcolor="#F7FAFC";');
+    lines.push("    margin=8;");
+    lines.push(
+      '    node [shape=component, style="filled,rounded", fillcolor="white"];',
+    );
+
     for (const commit of commits) {
       if (sortitionSpend === 0) {
         sortitionSpend =
           blockCommits.sortitionFeesMap.get(commit.sortitionId) ?? 0;
       }
 
-      const nodeAppearance = makeNodeAppearance(commit);
       const label = buildNodeLabel(commit);
-      const nodeName = `commit_${commit.txid}`;
-      const blockName = `block_${commit.burnBlockHeight}`;
-      const link = commit.blockHash
+      const nodeId = `"${commit.txid}"`;
+      const url = commit.blockHash
         ? `https://explorer.hiro.so/block/0x${commit.blockHash}`
         : `https://mempool.space/tx/${commit.txid}`;
 
-      nodeLines.push(`  ${nodeName}: {`);
-      nodeLines.push(`    class: ${formatClassList(nodeAppearance.classes)}`);
-      nodeLines.push(`    label: "${label}"`);
-      nodeLines.push(`    link: "${link}"`);
-      nodeLines.push(`    style: {`);
-      nodeLines.push(`      fill: "${nodeAppearance.fill}"`);
-      nodeLines.push(`    }`);
-      nodeLines.push(`  }`);
+      // Node styling
+      const fillColor = stringToColor(commit.sender);
+      let style = "filled,rounded";
+      let penwidth = 1;
+      let color = "#2D3748"; // Default border color
 
-      if (commit.parent) {
-        const parentCommit = blockCommits.allCommits.get(commit.parent);
-        if (parentCommit) {
-          const edgeAppearance = makeEdgeAppearance(
-            commit,
-            parentCommit,
-            lastHeight,
-          );
-          const source = `block_${parentCommit.burnBlockHeight}.commit_${parentCommit.txid}`;
-          const target = `${blockName}.${nodeName}`;
-          edgeLines.push(`${source} -> ${target}: {`);
-          edgeLines.push(`  class: ${formatClassList(edgeAppearance.classes)}`);
-          edgeLines.push(`}`);
-        }
+      if (!commit.won && !commit.canonical) {
+        style = "dashed,filled,rounded";
       }
+      if (commit.won) {
+        penwidth = 3;
+        color = "#2B6CB0";
+      }
+      if (commit.tip) {
+        penwidth = 4;
+      }
+      if (commit.nextTip) {
+        color = "#38A169";
+      }
+
+      lines.push(
+        `    ${nodeId} [label="${label}", URL="${url}", fillcolor="${fillColor}", color="${color}", style="${style}", penwidth=${penwidth}];`,
+      );
     }
 
-    const label = escapeD2String(
-      `₿ ${height}\n💰 ${formatNumber(sortitionSpend / 1000)}K sats`,
-    );
-
-    lines.push(`block_${height}: {`);
-    lines.push(`  class: BlockGroup`);
-    lines.push(`  label: "${label}"`);
-    lines.push(...nodeLines);
-    lines.push(`}`);
-    lines.push("");
-
-    lastHeight = height;
+    const clusterLabel = `₿ ${height}\\n💰 ${formatNumber(sortitionSpend / 1000)}K sats`;
+    lines.push(`    label="${clusterLabel}";`);
+    lines.push("  }"); // End subgraph
   }
 
-  return [...lines, ...edgeLines].join("\n");
+  // Generate edges after defining all nodes to ensure they exist (though Graphviz doesn't strictly require order, it helps readability)
+  for (const commit of blockCommits.allCommits.values()) {
+    if (commit.parent) {
+      const parentCommit = blockCommits.allCommits.get(commit.parent);
+      // Only draw edge if parent is also in the window (it should be, unless it's the very first block of the window)
+      if (parentCommit) {
+        const sourceId = `"${parentCommit.txid}"`;
+        const targetId = `"${commit.txid}"`;
+
+        let color = "#718096"; // Default gray
+        let penwidth = 1.5;
+
+        // Fork detection logic (same as D2)
+        // If parent is not in the immediately preceding block (implied by comparing heights?)
+        // The D2 logic was: if (lastHeight > 0 && parentCommit.burnBlockHeight !== lastHeight)
+        // But here we iterate all commits. Let's check block height diff.
+        if (commit.burnBlockHeight > parentCommit.burnBlockHeight + 1) {
+          // This logic is slightly different from the loop-based D2 one, which tracked 'lastHeight'.
+          // In D2 loop, lastHeight was the *previous iteration's* height.
+          // If parent is not in the block immediately preceding this commit's block?
+          // Actually, simply: if parent.height != commit.height - 1?
+          // Let's stick to the 'fork' styling if it's not a direct parent in height.
+          color = "#E53E3E"; // Red
+          penwidth = 2.5;
+        }
+
+        if (commit.canonical) {
+          color = "#3182CE"; // Blue
+          penwidth = 3.0;
+        }
+
+        lines.push(
+          `  ${sourceId} -> ${targetId} [color="${color}", penwidth=${penwidth}];`,
+        );
+      }
+    }
+  }
+
+  lines.push("}");
+  return lines.join("\n");
 }
 
 export function computeMinerVizSnapshot(params: {
@@ -575,12 +483,12 @@ export function computeMinerVizSnapshot(params: {
   );
   processCanonicalTip(sortitionDb, startBlock, blockCommits.allCommits);
 
-  const d2Source = generateD2(lowerBound, startBlock, blockCommits);
+  const dotSource = generateDot(lowerBound, startBlock, blockCommits);
 
   return {
     bitcoinBlockHeight: startBlock,
     generatedAt: generatedAt ?? new Date().toISOString(),
     sortitionId: latestSnapshot?.sortition_id ?? null,
-    d2Source,
+    dotSource,
   };
 }

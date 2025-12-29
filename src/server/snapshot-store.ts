@@ -11,7 +11,7 @@ const SNAPSHOT_SCHEMA = `CREATE TABLE IF NOT EXISTS miner_snapshots (
   bitcoin_block_height INTEGER NOT NULL,
   sortition_id TEXT,
   miner_power_json TEXT NOT NULL,
-  d2_source TEXT NOT NULL
+  dot_source TEXT NOT NULL
 )`;
 
 interface SnapshotRow {
@@ -19,7 +19,7 @@ interface SnapshotRow {
   bitcoin_block_height: number;
   sortition_id: string | null;
   miner_power_json: string;
-  d2_source: string;
+  dot_source: string;
 }
 
 export interface MinerSnapshotRecord {
@@ -68,7 +68,7 @@ export function insertSnapshot(
           bitcoin_block_height,
           sortition_id,
           miner_power_json,
-          d2_source
+          dot_source
         ) VALUES (?, ?, ?, ?, ?)`,
     );
     stmt.run(
@@ -76,7 +76,7 @@ export function insertSnapshot(
       record.bitcoinBlockHeight,
       record.sortitionId,
       JSON.stringify(record.minerPower),
-      record.minerViz.d2Source,
+      record.minerViz.dotSource,
     );
   } finally {
     db.close();
@@ -113,7 +113,7 @@ export function loadLatestSnapshot(
              bitcoin_block_height,
              sortition_id,
              miner_power_json,
-             d2_source
+             dot_source
            FROM miner_snapshots
            ORDER BY rowid DESC
            LIMIT 1`,
@@ -135,7 +135,7 @@ export function loadLatestSnapshot(
       generatedAt: row.generated_at,
       bitcoinBlockHeight: row.bitcoin_block_height,
       sortitionId: row.sortition_id,
-      d2Source: row.d2_source,
+      dotSource: row.dot_source,
     };
 
     return {

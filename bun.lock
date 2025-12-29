@@ -5,21 +5,22 @@
     "": {
       "name": "bun-react-template",
       "dependencies": {
-        "@chakra-ui/charts": "^3.27.1",
-        "@chakra-ui/react": "^3.27.0",
+        "@chakra-ui/charts": "^3.30.0",
+        "@chakra-ui/react": "^3.30.0",
         "@emotion/react": "^11.14.0",
         "@terrastruct/d2": "^0.1.33",
+        "@viz-js/viz": "^3.24.0",
         "croner": "^9.1.0",
         "panzoom": "^9.4.3",
-        "react": "^19.1.1",
-        "react-dom": "^19.1.1",
+        "react": "^19.2.3",
+        "react-dom": "^19.2.3",
         "react-icons": "^5.5.0",
-        "recharts": "^3.2.1",
+        "recharts": "^3.6.0",
       },
       "devDependencies": {
         "@types/bun": "latest",
-        "@types/react": "^19.1.13",
-        "@types/react-dom": "^19.1.9",
+        "@types/react": "^19.2.7",
+        "@types/react-dom": "^19.2.3",
       },
     },
   },
@@ -135,6 +136,8 @@
     "@types/react-dom": ["@types/react-dom@19.2.3", "", { "peerDependencies": { "@types/react": "^19.2.0" } }, "sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ=="],
 
     "@types/use-sync-external-store": ["@types/use-sync-external-store@0.0.6", "", {}, "sha512-zFDAD+tlpf2r4asuHEj0XH6pY6i0g5NeAHPn+15wk3BV6JA69eERFXC1gyGThDkVa1zCyKr5jox1+2LbV/AMLg=="],
+
+    "@viz-js/viz": ["@viz-js/viz@3.24.0", "", {}, "sha512-sTRz2cFN6PwICVC7GVlF2aYNAZ/LwF7Y1mp3B+8LXQ7otyHrzQYSzNBwJ4lctL/aS3x97ppw59z6zIW+wPs6bQ=="],
 
     "@zag-js/accordion": ["@zag-js/accordion@1.31.1", "", { "dependencies": { "@zag-js/anatomy": "1.31.1", "@zag-js/core": "1.31.1", "@zag-js/dom-query": "1.31.1", "@zag-js/types": "1.31.1", "@zag-js/utils": "1.31.1" } }, "sha512-3sGi4EZpGBz/O1IVkk9dzzWzP5vVVOj4Li6C+jHOnrgaWPouA/mBTP5L9HEL8qtFsECFZwpNo486eqiCmeHoGw=="],
 

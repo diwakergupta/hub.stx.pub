@@ -1,7 +1,6 @@
 import { serve } from "bun";
 
 import index from "./index.html";
-import { applyD2ClassDefinitions } from "./server/miner-viz";
 import { fetchRecentBlocks } from "./server/blocks-service";
 import { withDataDir, withLatestSnapshot } from "./server/api-utils";
 import { maybeStartSnapshotWorker } from "./server/worker-manager";
@@ -19,12 +18,10 @@ const server = serve({
 
     "/api/miners/viz": () =>
       withLatestSnapshot(({ snapshot }) => {
-      const d2Source = applyD2ClassDefinitions(snapshot.minerViz.d2Source);
-      return Response.json({
-        ...snapshot.minerViz,
-        d2Source,
-        description: "Stacks miner commits across recent Bitcoin blocks.",
-      });
+        return Response.json({
+          ...snapshot.minerViz,
+          description: "Stacks miner commits across recent Bitcoin blocks.",
+        });
       }),
 
     "/api/blocks": () =>

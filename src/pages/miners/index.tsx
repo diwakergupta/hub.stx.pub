@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { D2 } from "@terrastruct/d2";
+import { instance } from "@viz-js/viz";
 import {
   Box,
   Container,
@@ -19,7 +19,7 @@ import type { MinerPowerSnapshot } from "@/shared/miner-power";
 interface MinerVizResponse {
   bitcoinBlockHeight: number;
   generatedAt: string;
-  d2Source: string;
+  dotSource: string;
   sortitionId: string | null;
   description: string;
 }
@@ -34,7 +34,8 @@ type MinerPowerState =
   | { status: "error"; message: string }
   | { status: "ready"; payload: MinerPowerSnapshot };
 
-const d2 = new D2();
+// Initialize Viz instance promise once
+const vizPromise = instance();
 
 function useMinerViz(): VizState {
   const [state, setState] = useState<VizState>({ status: "idle" });
@@ -55,11 +56,9 @@ function useMinerViz(): VizState {
         }
 
         const payload = (await response.json()) as MinerVizResponse;
-        const compiled = await d2.compile(payload.d2Source, {
-          layout: "dagre",
-          pad: 0,
-        });
-        const svg = await d2.render(compiled.diagram, compiled.renderOptions);
+        const viz = await vizPromise;
+        const element = viz.renderSVGElement(payload.dotSource);
+        const svg = element.outerHTML;
 
         if (!disposed) {
           setState({ status: "ready", payload, svg });
@@ -152,6 +151,8 @@ function DiagramView({ state }: { state: VizState }) {
 
     const svgElement = svg as SVGSVGElement;
     svgElement.style.display = "block";
+    svgElement.style.maxWidth = "100%";
+    svgElement.style.height = "auto";
     svgElement.setAttribute("role", svgElement.getAttribute("role") ?? "img");
 
     if (!ENABLE_PAN_ZOOM) {
@@ -168,7 +169,7 @@ function DiagramView({ state }: { state: VizState }) {
       maxZoom: 10,
       minZoom: 1,
       zoomSpeed: 1,
-      initialZoom: 2,
+      initialZoom: 1,
     });
 
     return () => {
