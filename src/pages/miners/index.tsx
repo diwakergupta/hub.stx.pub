@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { instance } from "@viz-js/viz";
 import {
   Box,
+  Button,
   Container,
   Flex,
   Heading,
+  Input,
   Link,
   List,
   Spinner,
@@ -12,6 +14,12 @@ import {
   Table,
   Text,
 } from "@chakra-ui/react";
+import {
+  FaChevronLeft,
+  FaChevronRight,
+  FaRedo,
+  FaSearch,
+} from "react-icons/fa";
 import createPanZoom, { type PanZoom } from "panzoom";
 
 import type { MinerPowerSnapshot } from "@/shared/miner-power";
@@ -37,7 +45,7 @@ type MinerPowerState =
 // Initialize Viz instance promise once
 const vizPromise = instance();
 
-function useMinerViz(): VizState {
+function useMinerViz(height?: number): VizState {
   const [state, setState] = useState<VizState>({ status: "idle" });
 
   useEffect(() => {
@@ -47,7 +55,10 @@ function useMinerViz(): VizState {
     async function load() {
       setState({ status: "loading" });
       try {
-        const response = await fetch("/api/miners/viz", {
+        const url = height
+          ? `/api/miners/viz?height=${height}`
+          : "/api/miners/viz";
+        const response = await fetch(url, {
           signal: controller.signal,
         });
 
@@ -77,12 +88,12 @@ function useMinerViz(): VizState {
       disposed = true;
       controller.abort();
     };
-  }, []);
+  }, [height]);
 
   return state;
 }
 
-function useMinerPower(): MinerPowerState {
+function useMinerPower(height?: number): MinerPowerState {
   const [state, setState] = useState<MinerPowerState>({ status: "idle" });
 
   useEffect(() => {
@@ -92,7 +103,10 @@ function useMinerPower(): MinerPowerState {
     async function load() {
       setState({ status: "loading" });
       try {
-        const response = await fetch("/api/miners/power", {
+        const url = height
+          ? `/api/miners/power?height=${height}`
+          : "/api/miners/power";
+        const response = await fetch(url, {
           signal: controller.signal,
         });
 
@@ -121,7 +135,7 @@ function useMinerPower(): MinerPowerState {
       disposed = true;
       controller.abort();
     };
-  }, []);
+  }, [height]);
 
   return state;
 }
@@ -439,9 +453,106 @@ function MinerPowerView({ state }: { state: MinerPowerState }) {
   );
 }
 
+function SnapshotControls({
+  currentHeight,
+  onHeightChange,
+}: {
+  currentHeight?: number;
+  onHeightChange: (h: number | undefined) => void;
+}) {
+  const [inputVal, setInputVal] = useState("");
+
+  useEffect(() => {
+    if (currentHeight) {
+      setInputVal(currentHeight.toString());
+    }
+  }, [currentHeight]);
+
+  const handleSubmit = () => {
+    const h = parseInt(inputVal, 10);
+    if (!isNaN(h) && h > 0) {
+      onHeightChange(h);
+    }
+  };
+
+  return (
+    <Flex
+      gap={4}
+      align="center"
+      bg="gray.50"
+      p={3}
+      borderRadius="md"
+      borderWidth="1px"
+      borderColor="gray.200"
+      wrap="wrap"
+    >
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={!currentHeight}
+        onClick={() => currentHeight && onHeightChange(currentHeight - 1)}
+      >
+        <FaChevronLeft /> Prev
+      </Button>
+
+      <Flex gap={2} align="center">
+        <Text fontSize="sm" fontWeight="medium">
+          Block Height:
+        </Text>
+        <Input
+          size="sm"
+          width="120px"
+          value={inputVal}
+          onChange={(e) => setInputVal(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleSubmit();
+          }}
+          placeholder="Height"
+          bg="white"
+        />
+        <Button size="sm" onClick={handleSubmit}>
+          Go
+        </Button>
+      </Flex>
+
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={!currentHeight}
+        onClick={() => currentHeight && onHeightChange(currentHeight + 1)}
+      >
+        Next <FaChevronRight />
+      </Button>
+
+      <Box flex="1" />
+
+      <Button
+        variant="ghost"
+        size="sm"
+        colorPalette="blue"
+        onClick={() => {
+          onHeightChange(undefined);
+          setInputVal("");
+        }}
+      >
+        <FaRedo /> Latest
+      </Button>
+    </Flex>
+  );
+}
+
 export function MinersPage() {
-  const vizState = useMinerViz();
-  const minerPowerState = useMinerPower();
+  const [requestedHeight, setRequestedHeight] = useState<number | undefined>(
+    undefined,
+  );
+  const vizState = useMinerViz(requestedHeight);
+  const minerPowerState = useMinerPower(requestedHeight);
+
+  // Derive current height from loaded data if available, otherwise fallback to requested
+  const currentHeight =
+    vizState.status === "ready"
+      ? vizState.payload.bitcoinBlockHeight
+      : requestedHeight;
 
   return (
     <Container
@@ -449,10 +560,15 @@ export function MinersPage() {
       py={{ base: 4, md: 6 }}
       px={{ base: 4, md: 6 }}
     >
-      <Stack gap={2}>
-        <Stack gap={2}>
+      <Stack gap={4}>
+        <Flex justify="space-between" align="center" wrap="wrap" gap={4}>
           <Heading size="2xl">Stacks Miners</Heading>
-        </Stack>
+        </Flex>
+
+        <SnapshotControls
+          currentHeight={currentHeight}
+          onHeightChange={setRequestedHeight}
+        />
 
         <MinerPowerView state={minerPowerState} />
         <DiagramView state={vizState} />

@@ -149,3 +149,47 @@ export function loadLatestSnapshot(
     db.close();
   }
 }
+
+export function loadSnapshotByHeight(
+  dataDir: string,
+  targetHeight: number,
+): MinerSnapshotRecord | null {
+  const db = openHubDatabase(dataDir, "read");
+  try {
+    const row = db
+      .prepare<SnapshotRow>(
+        `SELECT
+             generated_at,
+             bitcoin_block_height,
+             sortition_id,
+             miner_power_json,
+             dot_source
+           FROM miner_snapshots
+           ORDER BY ABS(bitcoin_block_height - ?) ASC
+           LIMIT 1`,
+      )
+      .get(targetHeight);
+
+    if (!row) {
+      return null;
+    }
+
+    const minerPower = JSON.parse(row.miner_power_json) as MinerPowerSnapshot;
+    const minerViz: MinerVizSnapshot = {
+      generatedAt: row.generated_at,
+      bitcoinBlockHeight: row.bitcoin_block_height,
+      sortitionId: row.sortition_id,
+      dotSource: row.dot_source,
+    };
+
+    return {
+      generatedAt: row.generated_at,
+      bitcoinBlockHeight: row.bitcoin_block_height,
+      sortitionId: row.sortition_id,
+      minerPower,
+      minerViz,
+    };
+  } finally {
+    db.close();
+  }
+}

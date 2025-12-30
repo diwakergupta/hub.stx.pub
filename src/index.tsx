@@ -2,7 +2,7 @@ import { serve } from "bun";
 
 import index from "./index.html";
 import { fetchRecentBlocks } from "./server/blocks-service";
-import { withDataDir, withLatestSnapshot } from "./server/api-utils";
+import { withDataDir, withSnapshot } from "./server/api-utils";
 import { maybeStartSnapshotWorker } from "./server/worker-manager";
 
 maybeStartSnapshotWorker();
@@ -13,11 +13,11 @@ const server = serve({
     "/": index,
     "/blocks": index,
 
-    "/api/miners/power": () =>
-      withLatestSnapshot(({ snapshot }) => Response.json(snapshot.minerPower)),
+    "/api/miners/power": (req) =>
+      withSnapshot(req, ({ snapshot }) => Response.json(snapshot.minerPower)),
 
-    "/api/miners/viz": () =>
-      withLatestSnapshot(({ snapshot }) => {
+    "/api/miners/viz": (req) =>
+      withSnapshot(req, ({ snapshot }) => {
         return Response.json({
           ...snapshot.minerViz,
           description: "Stacks miner commits across recent Bitcoin blocks.",
