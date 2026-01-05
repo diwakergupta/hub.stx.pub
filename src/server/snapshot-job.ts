@@ -16,10 +16,15 @@ import {
   type MinerVizSnapshot,
 } from "./miner-viz";
 import { CHAINSTATE_DB_RELATIVE, SORTITION_DB_RELATIVE } from "./paths";
-import { insertSnapshot, pruneSnapshots } from "./snapshot-store";
+import {
+  insertSnapshot,
+  loadLatestSnapshot,
+  pruneSnapshots,
+} from "./snapshot-store";
 
 let cachedAddressMaps: MinerAddressMaps | null = null;
 let isRunning = false;
+const SNAPSHOT_INTERVAL_MINUTES = 1;
 
 function openReadOnlyDatabase(path: string): Database {
   const db = new Database(path, {
@@ -30,7 +35,7 @@ function openReadOnlyDatabase(path: string): Database {
 }
 
 function getBlockRange(db: Database, windowSize: number) {
-  const stmt = db.prepare<{ maxHeight: number | null }>(
+  const stmt = db.prepare<{ maxHeight: number | null }, []>(
     "SELECT MAX(block_height) AS maxHeight FROM block_commits",
   );
   const row = stmt.get();
@@ -76,12 +81,6 @@ function runSnapshotGeneration() {
 
   try {
     sortitionDb = openReadOnlyDatabase(sortitionPath);
-    chainstateDb = openReadOnlyDatabase(chainstatePath);
-
-    console.time("[snapshots] address-map");
-    updateAddressMaps(chainstateDb, sortitionPath);
-    const maps = getAddressMaps();
-    console.timeEnd("[snapshots] address-map");
 
     const { start } = getBlockRange(sortitionDb, MINER_VIZ_WINDOW);
     if (start === 0) {
@@ -90,6 +89,21 @@ function runSnapshotGeneration() {
       );
       return;
     }
+
+    const latestSnapshot = loadLatestSnapshot(dataDir);
+    if (latestSnapshot?.bitcoinBlockHeight === start) {
+      console.log(
+        `[snapshots] Snapshot for Bitcoin block ${start} already exists; skipping`,
+      );
+      return;
+    }
+
+    chainstateDb = openReadOnlyDatabase(chainstatePath);
+
+    console.time("[snapshots] address-map");
+    updateAddressMaps(chainstateDb, sortitionPath);
+    const maps = getAddressMaps();
+    console.timeEnd("[snapshots] address-map");
 
     const lowerBoundViz = Math.max(0, start - MINER_VIZ_WINDOW);
     const lowerBoundPower = Math.max(0, start - MINER_POWER_WINDOW);
@@ -150,7 +164,7 @@ export function initializeSnapshotScheduler() {
   }
 
   console.log(
-    "[startup] Initializing miner snapshot scheduler (interval: 4 minutes)",
+    `[startup] Initializing miner snapshot scheduler (interval: ${SNAPSHOT_INTERVAL_MINUTES} minutes)`,
   );
 
   // Prime address map and snapshot table immediately
@@ -158,7 +172,7 @@ export function initializeSnapshotScheduler() {
   runSnapshotGeneration();
   console.timeEnd("[startup] initial-snapshot");
 
-  new Cron("*/1 * * * *", () => {
+  new Cron(`*/${SNAPSHOT_INTERVAL_MINUTES} * * * *`, () => {
     console.time("[scheduler] Triggering miner snapshot refresh");
     runSnapshotGeneration();
     console.timeEnd("[scheduler] Finished miner snapshot refresh");

@@ -99,26 +99,34 @@ export function pruneSnapshots(
   }
 }
 
-export function loadLatestSnapshot(
+function parseSnapshotRow(row: SnapshotRow): MinerSnapshotRecord {
+  const minerPower = JSON.parse(row.miner_power_json) as MinerPowerSnapshot;
+  const minerViz: MinerVizSnapshot = {
+    generatedAt: row.generated_at,
+    bitcoinBlockHeight: row.bitcoin_block_height,
+    sortitionId: row.sortition_id,
+    dotSource: row.dot_source,
+  };
+
+  return {
+    generatedAt: row.generated_at,
+    bitcoinBlockHeight: row.bitcoin_block_height,
+    sortitionId: row.sortition_id,
+    minerPower,
+    minerViz,
+  };
+}
+
+function fetchSnapshot(
   dataDir: string,
+  query: string,
+  params: any[] = [],
 ): MinerSnapshotRecord | null {
   const db = openHubDatabase(dataDir, "read");
   try {
-    let row: SnapshotRow | undefined;
+    let row: SnapshotRow | null;
     try {
-      row = db
-        .prepare<SnapshotRow>(
-          `SELECT
-             generated_at,
-             bitcoin_block_height,
-             sortition_id,
-             miner_power_json,
-             dot_source
-           FROM miner_snapshots
-           ORDER BY rowid DESC
-           LIMIT 1`,
-        )
-        .get();
+      row = db.prepare<SnapshotRow, any[]>(query).get(...params);
     } catch (error) {
       if (error instanceof Error && /no such table/i.test(error.message)) {
         return null;
@@ -130,66 +138,44 @@ export function loadLatestSnapshot(
       return null;
     }
 
-    const minerPower = JSON.parse(row.miner_power_json) as MinerPowerSnapshot;
-    const minerViz: MinerVizSnapshot = {
-      generatedAt: row.generated_at,
-      bitcoinBlockHeight: row.bitcoin_block_height,
-      sortitionId: row.sortition_id,
-      dotSource: row.dot_source,
-    };
-
-    return {
-      generatedAt: row.generated_at,
-      bitcoinBlockHeight: row.bitcoin_block_height,
-      sortitionId: row.sortition_id,
-      minerPower,
-      minerViz,
-    };
+    return parseSnapshotRow(row);
   } finally {
     db.close();
   }
+}
+
+export function loadLatestSnapshot(
+  dataDir: string,
+): MinerSnapshotRecord | null {
+  return fetchSnapshot(
+    dataDir,
+    `SELECT
+       generated_at,
+       bitcoin_block_height,
+       sortition_id,
+       miner_power_json,
+       dot_source
+     FROM miner_snapshots
+     ORDER BY rowid DESC
+     LIMIT 1`,
+  );
 }
 
 export function loadSnapshotByHeight(
   dataDir: string,
   targetHeight: number,
 ): MinerSnapshotRecord | null {
-  const db = openHubDatabase(dataDir, "read");
-  try {
-    const row = db
-      .prepare<SnapshotRow>(
-        `SELECT
-             generated_at,
-             bitcoin_block_height,
-             sortition_id,
-             miner_power_json,
-             dot_source
-           FROM miner_snapshots
-           ORDER BY ABS(bitcoin_block_height - ?) ASC
-           LIMIT 1`,
-      )
-      .get(targetHeight);
-
-    if (!row) {
-      return null;
-    }
-
-    const minerPower = JSON.parse(row.miner_power_json) as MinerPowerSnapshot;
-    const minerViz: MinerVizSnapshot = {
-      generatedAt: row.generated_at,
-      bitcoinBlockHeight: row.bitcoin_block_height,
-      sortitionId: row.sortition_id,
-      dotSource: row.dot_source,
-    };
-
-    return {
-      generatedAt: row.generated_at,
-      bitcoinBlockHeight: row.bitcoin_block_height,
-      sortitionId: row.sortition_id,
-      minerPower,
-      minerViz,
-    };
-  } finally {
-    db.close();
-  }
+  return fetchSnapshot(
+    dataDir,
+    `SELECT
+       generated_at,
+       bitcoin_block_height,
+       sortition_id,
+       miner_power_json,
+       dot_source
+     FROM miner_snapshots
+     ORDER BY ABS(bitcoin_block_height - ?) ASC
+     LIMIT 1`,
+    [targetHeight],
+  );
 }
