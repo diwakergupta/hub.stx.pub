@@ -1,22 +1,16 @@
 import { expect, test } from "bun:test";
+import { generateDot, type BlockCommits } from "@/server/miner-viz";
 
-import { applyD2ClassDefinitions, D2_CLASS_DEFINITIONS } from "@/server/miner-viz";
+test("generateDot produces valid DOT structure", () => {
+  const emptyCommits: BlockCommits = {
+    sortitionFeesMap: new Map(),
+    allCommits: new Map(),
+    commitsByBlock: new Map(),
+  };
 
-test("applyD2ClassDefinitions injects class block when missing", () => {
-  const source = "direction: down\n\nnode: {}\n";
-  const result = applyD2ClassDefinitions(source);
-  expect(result).toContain(D2_CLASS_DEFINITIONS.trim());
-  expect(result.startsWith("direction: down")).toBeTrue();
-});
+  const dot = generateDot(100, 110, emptyCommits);
 
-test("applyD2ClassDefinitions leaves source untouched when classes exist", () => {
-  const existing = `direction: down
-
-classes: {
-  Foo {}
-}
-node: {}
-`;
-  const result = applyD2ClassDefinitions(existing);
-  expect(result).toBe(existing);
+  expect(dot).toContain("digraph G {");
+  expect(dot).toContain("graph [rankdir=TB, fontname=monospace];");
+  expect(dot).toContain("}");
 });

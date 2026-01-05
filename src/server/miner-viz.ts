@@ -38,7 +38,7 @@ interface FeesRow {
   tenure_tx_fees: number | null;
 }
 
-interface BlockCommit {
+export interface BlockCommit {
   burnHeaderHash: string;
   txid: string;
   vtxindex: number;
@@ -63,7 +63,7 @@ interface BlockCommit {
   parentKey: string;
 }
 
-interface BlockCommits {
+export interface BlockCommits {
   sortitionFeesMap: Map<string, number>;
   allCommits: Map<string, BlockCommit>;
   commitsByBlock: Map<number, BlockCommit[]>;

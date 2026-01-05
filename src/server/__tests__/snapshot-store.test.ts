@@ -25,7 +25,7 @@ test("pruneSnapshots removes rows older than a day", () => {
         generatedAt: "",
         bitcoinBlockHeight: 123,
         sortitionId: "abc",
-        d2Source: "node: {}",
+        dotSource: "digraph {}",
       },
     };
 
