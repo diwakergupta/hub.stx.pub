@@ -3,11 +3,11 @@ This project uses the following tech stack:
 - React (frontend library)
 - Chakra UI (component library)
 - sqlite for backend storage. Use bun's built-in sqlite driver for interactive with sqlite
-- D2 for diagrams. Style attributes are documented at https://d2lang.com/tour/style/
+- Graphviz (DOT) for diagrams.
 
-- Miner power stats and D2 graph snapshots are generated in a dedicated Bun worker (`src/server/snapshot-worker.ts`) every 2 minutes using Croner. The worker writes rows into `miner_snapshots` inside `STACKS_DATA_DIR/hub.sqlite` via helpers in `src/server/snapshot-job.ts` and `src/server/snapshot-store.ts`.
+- Miner power stats and graph snapshots are generated in a dedicated Bun worker (`src/server/snapshot-worker.ts`) every 2 minutes using Croner. The worker writes rows into `miner_snapshots` inside `STACKS_DATA_DIR/hub.sqlite` via helpers in `src/server/snapshot-job.ts` and `src/server/snapshot-store.ts`.
 - API routes simply return the latest cached snapshot; if the table is empty the handlers respond with 503. Remember to set `STACKS_DATA_DIR` before running `bun --hot src/index.tsx` so the worker can start.
-- The D2 SVG on the frontend is rendered in `DiagramView` with the `panzoom` npm package (see `src/App.tsx`); controls often need to re-initialize when the SVG changes.
+- The Graphviz SVG on the frontend is rendered in `DiagramView` with the `panzoom` npm package (see `src/App.tsx`); controls often need to re-initialize when the SVG changes.
 - Miner power calculations depend on the global address maps populated inside the worker. When touching that logic, make sure to convert SQLite values to numbers (`Number(row)`), otherwise string concatenation bugs reappear.
 
 If you start a fresh session, double-check:

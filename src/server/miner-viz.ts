@@ -430,15 +430,11 @@ export function generateDot(
         let color = "#718096"; // Default gray
         let penwidth = 1.5;
 
-        // Fork detection logic (same as D2)
+        // Fork detection logic
         // If parent is not in the immediately preceding block (implied by comparing heights?)
-        // The D2 logic was: if (lastHeight > 0 && parentCommit.burnBlockHeight !== lastHeight)
-        // But here we iterate all commits. Let's check block height diff.
+        // Let's check block height diff.
         if (commit.burnBlockHeight > parentCommit.burnBlockHeight + 1) {
-          // This logic is slightly different from the loop-based D2 one, which tracked 'lastHeight'.
-          // In D2 loop, lastHeight was the *previous iteration's* height.
           // If parent is not in the block immediately preceding this commit's block?
-          // Actually, simply: if parent.height != commit.height - 1?
           // Let's stick to the 'fork' styling if it's not a direct parent in height.
           color = "#E53E3E"; // Red
           penwidth = 2.5;

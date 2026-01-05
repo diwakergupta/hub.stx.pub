@@ -13,7 +13,6 @@
     "@chakra-ui/charts": "^3.30.0",
     "@chakra-ui/react": "^3.30.0",
     "@emotion/react": "^11.14.0",
-    "@terrastruct/d2": "^0.1.33",
     "@viz-js/viz": "^3.24.0",
     "croner": "^9.1.0",
     "panzoom": "^9.4.3",

@@ -55,23 +55,7 @@ function getAddressMaps(): MinerAddressMaps {
   return cachedAddressMaps;
 }
 
-function runSnapshotGeneration() {
-  if (isRunning) {
-    console.warn(
-      "[snapshots] Previous run still in progress; skipping this tick",
-    );
-    return;
-  }
-
-  const dataDir = getStacksDataDir();
-  if (!dataDir) {
-    console.warn(
-      "[snapshots] STACKS_DATA_DIR is not set; unable to generate snapshots",
-    );
-    return;
-  }
-
-  isRunning = true;
+function generateSnapshot(dataDir: string) {
   const generatedAt = new Date().toISOString();
   const sortitionPath = join(dataDir, SORTITION_DB_RELATIVE);
   const chainstatePath = join(dataDir, CHAINSTATE_DB_RELATIVE);
@@ -145,13 +129,48 @@ function runSnapshotGeneration() {
         minerViz.sortitionId ?? "unknown"
       }) at ${generatedAt}`,
     );
-  } catch (error) {
-    console.error("[snapshots] Failed to generate miner snapshot", error);
   } finally {
     sortitionDb?.close();
     chainstateDb?.close();
-    isRunning = false;
   }
+}
+
+async function runSnapshotGeneration() {
+  if (isRunning) {
+    console.warn(
+      "[snapshots] Previous run still in progress; skipping this tick",
+    );
+    return;
+  }
+
+  const dataDir = getStacksDataDir();
+  if (!dataDir) {
+    console.warn(
+      "[snapshots] STACKS_DATA_DIR is not set; unable to generate snapshots",
+    );
+    return;
+  }
+
+  isRunning = true;
+  const maxRetries = 3;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      generateSnapshot(dataDir);
+      break; // Success
+    } catch (error) {
+      console.error(`[snapshots] Attempt ${attempt}/${maxRetries} failed:`, error);
+      if (attempt < maxRetries) {
+        const delay = 2000 * attempt;
+        console.log(`[snapshots] Retrying in ${delay}ms...`);
+        await Bun.sleep(delay);
+      } else {
+         console.error("[snapshots] All snapshot generation attempts failed");
+      }
+    }
+  }
+  
+  isRunning = false;
 }
 
 export function initializeSnapshotScheduler() {
