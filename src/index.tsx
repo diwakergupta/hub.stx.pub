@@ -12,6 +12,7 @@ const server = serve({
   routes: {
     "/": index,
     "/blocks": index,
+    "/utilities": index,
 
     "/api/miners/power": (req) =>
       withSnapshot(req, ({ snapshot }) => Response.json(snapshot.minerPower)),
