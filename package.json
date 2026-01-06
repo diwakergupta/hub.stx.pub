@@ -1,6 +1,8 @@
 {
-  "name": "new",
+  "name": "stx-pub",
   "version": "0.1.0",
+  "description": "Stacks miner telemetry explorer visualizing block commits and miner power",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "scripts": {

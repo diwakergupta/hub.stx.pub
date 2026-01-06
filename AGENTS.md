@@ -1,129 +1,50 @@
-This project uses the following tech stack:
-- Bun (runtime, package manager, bundler, test runner)
-- React (frontend library)
-- Chakra UI (component library)
-- sqlite for backend storage. Use bun's built-in sqlite driver for interactive with sqlite
-- Graphviz (DOT) for diagrams.
+# Context for AI Agents
 
-- Miner power stats and graph snapshots are generated in a dedicated Bun worker (`src/server/snapshot-worker.ts`) every 2 minutes using Croner. The worker writes rows into `miner_snapshots` inside `STACKS_DATA_DIR/hub.sqlite` via helpers in `src/server/snapshot-job.ts` and `src/server/snapshot-store.ts`.
-- API routes simply return the latest cached snapshot; if the table is empty the handlers respond with 503. Remember to set `STACKS_DATA_DIR` before running `bun --hot src/index.tsx` so the worker can start.
-- The Graphviz SVG on the frontend is rendered in `DiagramView` with the `panzoom` npm package (see `src/App.tsx`); controls often need to re-initialize when the SVG changes.
-- Miner power calculations depend on the global address maps populated inside the worker. When touching that logic, make sure to convert SQLite values to numbers (`Number(row)`), otherwise string concatenation bugs reappear.
+This file provides high-level context and architectural guidelines for AI agents working on this codebase.
 
-If you start a fresh session, double-check:
-- `STACKS_DATA_DIR` points at real sortition + chainstate DBs before running any commands.
-- The worker’s console logs (prefixed `[worker]`, `[snapshots]`, `[scheduler]`) are visible in the main process – they are helpful for diagnosing snapshot lag.
-- `miner_snapshots` schema lives in `snapshot-store.ts`; add migrations there if you need extra fields.
+## Project Overview
 
-## Chakra UI
+**stx.pub** is a Stacks miner telemetry explorer. It visualizes block commits, sortition data, and miner power distribution using data from a local Stacks node.
 
-Use the Chakra MCP server, if available.
-LLM docs available at https://chakra-ui.com/llms.txt
+## Tech Stack
 
-## Bun
+- **Runtime**: [Bun](https://bun.sh) (Package manager, bundler, test runner, sqlite driver)
+- **Frontend**: React 19, Chakra UI v3
+- **Backend**: Bun.serve(), bun:sqlite
+- **Visualization**: Graphviz (via `@viz-js/viz`) for block commit graphs, Recharts for charts
+- **Data**: SQLite (consuming `marf.sqlite` and `index.sqlite` from a Stacks node)
 
-Default to using Bun instead of Node.js.
+## Architecture
 
-- Use `bun <file>` instead of `node <file>` or `ts-node <file>`
-- Use `bun test` instead of `jest` or `vitest`
-- Use `bun build <file.html|file.ts|file.css>` instead of `webpack` or `esbuild`
-- Use `bun install` instead of `npm install` or `yarn install` or `pnpm install`
-- Use `bun run <script>` instead of `npm run <script>` or `yarn run <script>` or `pnpm run <script>`
-- Bun automatically loads .env, so don't use dotenv.
+### Backend (`src/server/`)
 
-## APIs
+- **Worker (`snapshot-worker.ts`)**: Runs on a cron schedule (every 2 minutes). It reads from the raw Stacks DBs (`chainstate`, `sortition`) and aggregates data into a "Hub DB" (`hub.sqlite`).
+- **Jobs (`snapshot-job.ts`)**: Contains the core logic for generating snapshots. Includes retry logic for resilience.
+- **Services**:
+    - `miner-power-service.ts`: Aggregates miner win rates, BTC spend, and STX earnings.
+    - `miner-viz.ts`: Generates Graphviz DOT source for block commit visualizations.
+    - `blocks-service.ts`: Fetches recent block data for the blocks page.
+- **API**: Simple HTTP handlers in `src/index.tsx` that serve the latest cached snapshot from `hub.sqlite`.
 
-- `Bun.serve()` supports WebSockets, HTTPS, and routes. Don't use `express`.
-- `bun:sqlite` for SQLite. Don't use `better-sqlite3`.
-- `Bun.redis` for Redis. Don't use `ioredis`.
-- `Bun.sql` for Postgres. Don't use `pg` or `postgres.js`.
-- `WebSocket` is built-in. Don't use `ws`.
-- Prefer `Bun.file` over `node:fs`'s readFile/writeFile
-- Bun.$`ls` instead of execa.
+### Frontend (`src/pages/`, `src/components/`)
 
-## Testing
+- **Routing**: Simple client-side routing in `App.tsx`.
+- **Visualizations**:
+    - `DiagramView`: Renders the DOT graph using `@viz-js/viz` and `panzoom`.
+    - `MinerPowerView`: Displays miner stats in a sortable table.
+    - `BlocksPage`: Shows recent block stats and tenure costs.
 
-Use `bun test` to run tests.
+## Key Conventions
 
-```ts#index.test.ts
-import { test, expect } from "bun:test";
+- **Data Directory**: `STACKS_DATA_DIR` must point to a directory containing valid `chainstate/` and `burnchain/` subdirectories.
+- **SQLite Types**: ALWAYS cast SQLite `BIGINT` or `numeric` columns to JavaScript `Number()` when reading, or `BigInt()` if precision is critical (though `Number` is usually sufficient for display).
+- **Graphviz**: We use `digraph` with `rankdir=TB`. Nodes are styled based on miner address hashes.
+- **Testing**: Use `bun test`. Integration tests (`src/server/__tests__`) often create temporary SQLite databases to verify logic.
 
-test("hello world", () => {
-  expect(1).toBe(1);
-});
-```
+## Common Tasks
 
-## Frontend
-
-Use HTML imports with `Bun.serve()`. Don't use `vite`. HTML imports fully support React, CSS, Tailwind.
-
-Server:
-
-```ts#index.ts
-import index from "./index.html"
-
-Bun.serve({
-  routes: {
-    "/": index,
-    "/api/users/:id": {
-      GET: (req) => {
-        return new Response(JSON.stringify({ id: req.params.id }));
-      },
-    },
-  },
-  // optional websocket support
-  websocket: {
-    open: (ws) => {
-      ws.send("Hello, world!");
-    },
-    message: (ws, message) => {
-      ws.send(message);
-    },
-    close: (ws) => {
-      // handle close
-    }
-  },
-  development: {
-    hmr: true,
-    console: true,
-  }
-})
-```
-
-HTML files can import .tsx, .jsx or .js files directly and Bun's bundler will transpile & bundle automatically. `<link>` tags can point to stylesheets and Bun's CSS bundler will bundle.
-
-```html#index.html
-<html>
-  <body>
-    <h1>Hello, world!</h1>
-    <script type="module" src="./frontend.tsx"></script>
-  </body>
-</html>
-```
-
-With the following `frontend.tsx`:
-
-```tsx#frontend.tsx
-import React from "react";
-
-// import .css files directly and it works
-import './index.css';
-
-import { createRoot } from "react-dom/client";
-
-const root = createRoot(document.body);
-
-export default function Frontend() {
-  return <h1>Hello, world!</h1>;
-}
-
-root.render(<Frontend />);
-```
-
-Then, run index.ts
-
-```sh
-bun --hot ./index.ts
-```
-
-For more information, read the Bun API docs in `node_modules/bun-types/docs/**.md`.
+- **Adding a new metric**:
+    1. Update the schema in `src/server/snapshot-store.ts`.
+    2. Update aggregation logic in `src/server/miner-power-service.ts`.
+    3. Update the frontend type definitions (`src/shared/miner-power.ts`) and UI components.
+- **Debugging Snapshot Lag**: Check the console logs for `[snapshots]` or `[worker]` errors. Ensure `STACKS_DATA_DIR` is accessible.
