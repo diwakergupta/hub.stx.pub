@@ -16,6 +16,7 @@
     "@chakra-ui/react": "^3.30.0",
     "@emotion/react": "^11.14.0",
     "@viz-js/viz": "^3.24.0",
+    "c32check": "^2.0.0",
     "croner": "^9.1.0",
     "panzoom": "^9.4.3",
     "react": "^19.2.3",

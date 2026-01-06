@@ -13,10 +13,12 @@ import {
 import { Provider } from "@/components/ui/provider";
 import { BlocksPage } from "./pages/blocks";
 import { MinersPage } from "./pages/miners";
+import { UtilitiesPage } from "./pages/utilities";
 
 const NAV_ITEMS = [
   { href: "/", label: "Miners" },
   { href: "/blocks", label: "Blocks" },
+  { href: "/utilities", label: "Utilities" },
 ] as const;
 
 function Header({ currentPath }: { currentPath: string }) {
@@ -85,6 +87,7 @@ function Footer() {
 export function App() {
   const path = typeof window !== "undefined" ? window.location.pathname : "/";
   const isBlocksPage = path === "/blocks" || path.startsWith("/blocks/");
+  const isUtilitiesPage = path === "/utilities" || path.startsWith("/utilities/");
 
   return (
     <Provider>
@@ -97,7 +100,13 @@ export function App() {
       >
         <Header currentPath={path} />
         <Box as="main" flex="1">
-          {isBlocksPage ? <BlocksPage /> : <MinersPage />}
+          {isUtilitiesPage ? (
+            <UtilitiesPage />
+          ) : isBlocksPage ? (
+            <BlocksPage />
+          ) : (
+            <MinersPage />
+          )}
         </Box>
         <Footer />
       </Flex>
