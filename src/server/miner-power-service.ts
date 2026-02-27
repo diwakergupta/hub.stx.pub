@@ -43,19 +43,24 @@ export function buildMinerAddressMaps(
 
   try {
     const stmt = chainstateDb.prepare<AddressMapRow>(
-      `SELECT
-          payments.recipient AS stacksAddress,
+      `WITH recent_payments AS (
+          SELECT recipient, index_block_hash
+          FROM payments
+          WHERE recipient IS NOT NULL
+          ORDER BY stacks_block_height DESC
+          LIMIT ?
+        )
+        SELECT
+          recent_payments.recipient AS stacksAddress,
           TRIM(sortition.block_commits.apparent_sender, '"') AS bitcoinAddress
-        FROM payments
+        FROM recent_payments
         LEFT JOIN nakamoto_block_headers
-          ON payments.index_block_hash = nakamoto_block_headers.index_block_hash
+          ON recent_payments.index_block_hash = nakamoto_block_headers.index_block_hash
         LEFT JOIN sortition.snapshots
           ON nakamoto_block_headers.consensus_hash = sortition.snapshots.consensus_hash
         LEFT JOIN sortition.block_commits
           ON sortition.snapshots.winning_block_txid = sortition.block_commits.txid
-        WHERE payments.recipient IS NOT NULL
-        ORDER BY payments.stacks_block_height DESC
-        LIMIT ?`,
+        `,
     );
 
     const rows = stmt.all(limit);
@@ -101,44 +106,25 @@ export function computeMinerPowerSnapshot({
   sortitionId,
   generatedAt,
 }: ComputeMinerPowerParams): MinerPowerSnapshot {
-  const baseQuery = `WITH RECURSIVE block_ancestors(
-        burn_header_height,
-        parent_block_id,
-        address,
-        burnchain_commit_burn,
-        stx_reward
-      ) AS (
-        SELECT
-          nakamoto_block_headers.burn_header_height,
-          nakamoto_block_headers.parent_block_id,
-          payments.recipient,
-          payments.burnchain_commit_burn,
-          payments.coinbase + payments.tx_fees_anchored + payments.tx_fees_streamed AS stx_reward
+  const baseQuery = `WITH recent_tenure_changes AS (
+        SELECT burn_header_height, index_block_hash
         FROM nakamoto_block_headers
-        JOIN payments ON nakamoto_block_headers.index_block_hash = payments.index_block_hash
-        WHERE nakamoto_block_headers.tenure_changed = 1
-        UNION ALL
-        SELECT
-          nb.burn_header_height,
-          nb.parent_block_id,
-          payments.recipient,
-          payments.burnchain_commit_burn,
-          payments.coinbase + payments.tx_fees_anchored + payments.tx_fees_streamed AS stx_reward
-        FROM nakamoto_block_headers AS nb
-        JOIN payments ON nb.index_block_hash = payments.index_block_hash
-        JOIN block_ancestors ON nb.index_block_hash = block_ancestors.parent_block_id
-        ORDER BY nb.burn_header_height DESC
+        WHERE tenure_changed = 1
+          AND burn_header_height > ?
+        ORDER BY burn_header_height DESC
+        LIMIT ?
       )
       SELECT
-        burn_header_height,
-        address,
-        burnchain_commit_burn,
-        stx_reward
-      FROM block_ancestors
-      LIMIT ?`;
+        recent_tenure_changes.burn_header_height,
+        payments.recipient AS address,
+        payments.burnchain_commit_burn,
+        payments.coinbase + payments.tx_fees_anchored + payments.tx_fees_streamed AS stx_reward
+      FROM recent_tenure_changes
+      JOIN payments ON payments.index_block_hash = recent_tenure_changes.index_block_hash
+      ORDER BY recent_tenure_changes.burn_header_height DESC`;
 
   const blockStmt = chainstateDb.prepare<BlockAggregateRow>(baseQuery);
-  const blockRows = blockStmt.all(windowSize);
+  const blockRows = blockStmt.all(lowerBound, windowSize);
 
   const btcSpent = new Map<string, number>();
   const stxEarned = new Map<string, number>();
@@ -150,6 +136,9 @@ export function computeMinerPowerSnapshot({
       continue;
     }
     const addr = row.address;
+    if (!addr) {
+      continue;
+    }
     blocksWon.set(addr, (blocksWon.get(addr) ?? 0) + 1);
     btcSpent.set(addr, (btcSpent.get(addr) ?? 0) + row.burnchain_commit_burn);
     stxEarned.set(addr, (stxEarned.get(addr) ?? 0) + row.stx_reward);

@@ -24,6 +24,7 @@ import {
 
 let cachedAddressMaps: MinerAddressMaps | null = null;
 let isRunning = false;
+let snapshotCron: Cron | null = null;
 const SNAPSHOT_INTERVAL_MINUTES = 1;
 
 function openReadOnlyDatabase(path: string): Database {
@@ -31,6 +32,8 @@ function openReadOnlyDatabase(path: string): Database {
     readonly: true,
     strict: true,
   });
+  db.exec("PRAGMA query_only = true");
+  db.exec("PRAGMA temp_store = MEMORY");
   return db;
 }
 
@@ -182,19 +185,25 @@ export function initializeSnapshotScheduler() {
     return;
   }
 
+  if (snapshotCron) {
+    console.log("[startup] Miner snapshot scheduler already initialized");
+    return;
+  }
+
   console.log(
     `[startup] Initializing miner snapshot scheduler (interval: ${SNAPSHOT_INTERVAL_MINUTES} minutes)`,
   );
 
   // Prime address map and snapshot table immediately
   console.time("[startup] initial-snapshot");
-  runSnapshotGeneration();
-  console.timeEnd("[startup] initial-snapshot");
+  void runSnapshotGeneration().finally(() => {
+    console.timeEnd("[startup] initial-snapshot");
+  });
 
-  new Cron(`*/${SNAPSHOT_INTERVAL_MINUTES} * * * *`, () => {
-    console.time("[scheduler] Triggering miner snapshot refresh");
-    runSnapshotGeneration();
-    console.timeEnd("[scheduler] Finished miner snapshot refresh");
+  snapshotCron = new Cron(`*/${SNAPSHOT_INTERVAL_MINUTES} * * * *`, async () => {
+    console.time("[scheduler] miner snapshot refresh");
+    await runSnapshotGeneration();
+    console.timeEnd("[scheduler] miner snapshot refresh");
   });
 }
 
