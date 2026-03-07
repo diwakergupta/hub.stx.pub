@@ -1,4 +1,5 @@
 import { getStacksDataDir } from "./env";
+import { logger } from "./logger";
 import {
   loadLatestSnapshot,
   loadSnapshotByHeight,
@@ -14,7 +15,7 @@ type SnapshotHandler = (params: {
 }) => Response | Promise<Response>;
 
 function respondMissingDataDir(): Response {
-  console.warn("[api] STACKS_DATA_DIR not configured; failing request");
+  logger.warn("api.missing-data-dir");
   return Response.json(
     { error: "STACKS_DATA_DIR is not configured" },
     { status: 500 },
@@ -22,7 +23,7 @@ function respondMissingDataDir(): Response {
 }
 
 function respondMissingSnapshot(): Response {
-  console.warn("[api] No miner snapshot available; returning 503");
+  logger.warn("api.missing-snapshot");
   return Response.json(
     { error: "No miner snapshot available" },
     { status: 503 },

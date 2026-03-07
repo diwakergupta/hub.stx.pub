@@ -4,6 +4,7 @@ import { join } from "path";
 
 import type { MinerPowerSnapshot } from "@/shared/miner-power";
 import { getStacksDataDir } from "./env";
+import { logger } from "./logger";
 import {
   MINER_POWER_WINDOW,
   buildMinerAddressMaps,
@@ -21,6 +22,8 @@ import {
   loadLatestSnapshot,
   pruneSnapshots,
 } from "./snapshot-store";
+
+const snapshotLogger = logger.child({ component: "snapshot-job" });
 
 let cachedAddressMaps: MinerAddressMaps | null = null;
 let isRunning = false;
@@ -58,6 +61,16 @@ function getAddressMaps(): MinerAddressMaps {
   return cachedAddressMaps;
 }
 
+function logDuration(event: string, startedAt: number, extra?: object) {
+  snapshotLogger.info(
+    {
+      durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
+      ...extra,
+    },
+    event,
+  );
+}
+
 function generateSnapshot(dataDir: string) {
   const generatedAt = new Date().toISOString();
   const sortitionPath = join(dataDir, SORTITION_DB_RELATIVE);
@@ -71,31 +84,27 @@ function generateSnapshot(dataDir: string) {
 
     const { start } = getBlockRange(sortitionDb, MINER_VIZ_WINDOW);
     if (start === 0) {
-      console.warn(
-        "[snapshots] No block commits found; skipping snapshot generation",
-      );
+      snapshotLogger.warn("snapshots.no-block-commits");
       return;
     }
 
     const latestSnapshot = loadLatestSnapshot(dataDir);
     if (latestSnapshot?.bitcoinBlockHeight === start) {
-      console.log(
-        `[snapshots] Snapshot for Bitcoin block ${start} already exists; skipping`,
-      );
+      snapshotLogger.info({ bitcoinBlockHeight: start }, "snapshots.already-exists");
       return;
     }
 
     chainstateDb = openReadOnlyDatabase(chainstatePath);
 
-    console.time("[snapshots] address-map");
+    const addressMapStart = performance.now();
     updateAddressMaps(chainstateDb, sortitionPath);
     const maps = getAddressMaps();
-    console.timeEnd("[snapshots] address-map");
+    logDuration("snapshots.address-map.complete", addressMapStart);
 
     const lowerBoundViz = Math.max(0, start - MINER_VIZ_WINDOW);
     const lowerBoundPower = Math.max(0, start - MINER_POWER_WINDOW);
 
-    console.time("[snapshots] viz-generation");
+    const vizStart = performance.now();
     const minerViz = computeMinerVizSnapshot({
       sortitionDb,
       chainstateDb,
@@ -103,9 +112,9 @@ function generateSnapshot(dataDir: string) {
       startBlock: start,
       generatedAt,
     });
-    console.timeEnd("[snapshots] viz-generation");
+    logDuration("snapshots.viz-generation.complete", vizStart);
 
-    console.time("[snapshots] power-generation");
+    const powerStart = performance.now();
     const minerPower = computeMinerPowerSnapshot({
       chainstateDb,
       sortitionDb,
@@ -115,7 +124,7 @@ function generateSnapshot(dataDir: string) {
       sortitionId: minerViz.sortitionId,
       generatedAt,
     });
-    console.timeEnd("[snapshots] power-generation");
+    logDuration("snapshots.power-generation.complete", powerStart);
 
     insertSnapshot(dataDir, {
       generatedAt,
@@ -127,10 +136,13 @@ function generateSnapshot(dataDir: string) {
 
     pruneSnapshots(dataDir);
 
-    console.log(
-      `[snapshots] Stored snapshot for Bitcoin block ${start} (sortition ${
-        minerViz.sortitionId ?? "unknown"
-      }) at ${generatedAt}`,
+    snapshotLogger.info(
+      {
+        bitcoinBlockHeight: start,
+        sortitionId: minerViz.sortitionId ?? null,
+        generatedAt,
+      },
+      "snapshots.stored",
     );
   } finally {
     sortitionDb?.close();
@@ -140,70 +152,66 @@ function generateSnapshot(dataDir: string) {
 
 async function runSnapshotGeneration() {
   if (isRunning) {
-    console.warn(
-      "[snapshots] Previous run still in progress; skipping this tick",
-    );
+    snapshotLogger.warn("snapshots.previous-run-in-progress");
     return;
   }
 
   const dataDir = getStacksDataDir();
   if (!dataDir) {
-    console.warn(
-      "[snapshots] STACKS_DATA_DIR is not set; unable to generate snapshots",
-    );
+    snapshotLogger.warn("snapshots.missing-data-dir");
     return;
   }
 
   isRunning = true;
   const maxRetries = 3;
-  
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      generateSnapshot(dataDir);
-      break; // Success
-    } catch (error) {
-      console.error(`[snapshots] Attempt ${attempt}/${maxRetries} failed:`, error);
-      if (attempt < maxRetries) {
-        const delay = 2000 * attempt;
-        console.log(`[snapshots] Retrying in ${delay}ms...`);
-        await Bun.sleep(delay);
-      } else {
-         console.error("[snapshots] All snapshot generation attempts failed");
+
+  try {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        generateSnapshot(dataDir);
+        break;
+      } catch (error) {
+        snapshotLogger.error({ err: error, attempt, maxRetries }, "snapshots.attempt.failed");
+        if (attempt < maxRetries) {
+          const delay = 2000 * attempt;
+          snapshotLogger.info({ delayMs: delay, nextAttempt: attempt + 1 }, "snapshots.retry.scheduled");
+          await Bun.sleep(delay);
+        } else {
+          snapshotLogger.error({ attempt, maxRetries }, "snapshots.all-attempts-failed");
+        }
       }
     }
+  } finally {
+    isRunning = false;
   }
-  
-  isRunning = false;
 }
 
 export function initializeSnapshotScheduler() {
   const dataDir = getStacksDataDir();
   if (!dataDir) {
-    console.warn(
-      "[startup] STACKS_DATA_DIR is not set; miner snapshots disabled",
-    );
+    snapshotLogger.warn("startup.snapshots.disabled.missing-data-dir");
     return;
   }
 
   if (snapshotCron) {
-    console.log("[startup] Miner snapshot scheduler already initialized");
+    snapshotLogger.info("startup.snapshot-scheduler.already-initialized");
     return;
   }
 
-  console.log(
-    `[startup] Initializing miner snapshot scheduler (interval: ${SNAPSHOT_INTERVAL_MINUTES} minutes)`,
+  snapshotLogger.info(
+    { intervalMinutes: SNAPSHOT_INTERVAL_MINUTES },
+    "startup.snapshot-scheduler.initializing",
   );
 
-  // Prime address map and snapshot table immediately
-  console.time("[startup] initial-snapshot");
+  const initialSnapshotStart = performance.now();
   void runSnapshotGeneration().finally(() => {
-    console.timeEnd("[startup] initial-snapshot");
+    logDuration("startup.initial-snapshot.complete", initialSnapshotStart);
   });
 
   snapshotCron = new Cron(`*/${SNAPSHOT_INTERVAL_MINUTES} * * * *`, async () => {
-    console.time("[scheduler] miner snapshot refresh");
+    const refreshStart = performance.now();
     await runSnapshotGeneration();
-    console.timeEnd("[scheduler] miner snapshot refresh");
+    logDuration("scheduler.snapshot-refresh.complete", refreshStart);
   });
 }
 

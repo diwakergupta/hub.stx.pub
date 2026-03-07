@@ -1,11 +1,8 @@
 import { getStacksDataDir } from "./env";
+import { logger } from "./logger";
 import { initializeSnapshotScheduler } from "./snapshot-job";
 
 const dataDir = getStacksDataDir();
-console.log(
-  `[worker] Miner snapshot worker starting${
-    dataDir ? ` with STACKS_DATA_DIR=${dataDir}` : " (no STACKS_DATA_DIR configured)"
-  }`,
-);
+logger.info({ dataDir: dataDir ?? null }, "snapshot.worker.starting");
 
 initializeSnapshotScheduler();

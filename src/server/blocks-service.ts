@@ -2,6 +2,7 @@ import { Database } from "bun:sqlite";
 import { join } from "path";
 
 import type { BlockSample, CostVector } from "@/shared/blocks";
+import { logger } from "./logger";
 import { CHAINSTATE_DB_RELATIVE } from "./paths";
 
 interface BlockRow {
@@ -36,7 +37,7 @@ export function parseCostVector(raw: string | null): CostVector {
       runtime: Number(parsed.runtime ?? 0),
     };
   } catch (error) {
-    console.warn("[blocks] Failed to parse cost vector", error);
+    logger.warn({ err: error }, "blocks.cost-vector.parse-failed");
     return {
       readLength: 0,
       readCount: 0,

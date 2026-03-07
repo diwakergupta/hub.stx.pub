@@ -3,6 +3,8 @@ import { serve } from "bun";
 import index from "./index.html";
 import { fetchRecentBlocks } from "./server/blocks-service";
 import { withDataDir, withSnapshot } from "./server/api-utils";
+import { logger } from "./server/logger";
+import { withRequestLogging } from "./server/request-logger";
 import { maybeStartSnapshotWorker } from "./server/worker-manager";
 
 maybeStartSnapshotWorker();
@@ -14,22 +16,25 @@ const server = serve({
     "/blocks": index,
     "/utilities": index,
 
-    "/api/miners/power": (req) =>
+    "/api/miners/power": withRequestLogging("/api/miners/power", (req) =>
       withSnapshot(req, ({ snapshot }) => Response.json(snapshot.minerPower)),
+    ),
 
-    "/api/miners/viz": (req) =>
+    "/api/miners/viz": withRequestLogging("/api/miners/viz", (req) =>
       withSnapshot(req, ({ snapshot }) => {
         return Response.json({
           ...snapshot.minerViz,
           description: "Stacks miner commits across recent Bitcoin blocks.",
         });
       }),
+    ),
 
-    "/api/blocks": () =>
+    "/api/blocks": withRequestLogging("/api/blocks", () =>
       withDataDir(({ dataDir }) => {
         const blocks = fetchRecentBlocks({ dataDir, windowSize: 20 });
         return Response.json({ blocks });
       }),
+    ),
   },
 
   development: !isProduction && {
@@ -38,4 +43,4 @@ const server = serve({
   },
 });
 
-console.log(`🚀 Server running at ${server.url}`);
+logger.info({ url: server.url.toString() }, "server.start");

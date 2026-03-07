@@ -1,24 +1,19 @@
 import { getStacksDataDir } from "./env";
+import { logger } from "./logger";
 
 let snapshotWorker: Worker | null = null;
 
 export function maybeStartSnapshotWorker(): Worker | null {
   if (snapshotWorker) {
-    console.log("[startup] Miner snapshot worker already running");
+    logger.info("snapshot.worker.already-running");
     return snapshotWorker;
   }
 
   const dataDir = getStacksDataDir();
-  console.log(
-    `[startup] STACKS_DATA_DIR ${
-      dataDir ? `→ ${dataDir}` : "not configured"
-    }`,
-  );
+  logger.info({ dataDir: dataDir ?? null }, "startup.stacks-data-dir");
 
   if (!dataDir) {
-    console.warn(
-      "[startup] Miner snapshot worker not started (missing STACKS_DATA_DIR)",
-    );
+    logger.warn("snapshot.worker.not-started.missing-data-dir");
     return null;
   }
 
@@ -29,12 +24,12 @@ export function maybeStartSnapshotWorker(): Worker | null {
       type: "module",
     });
     worker.addEventListener("error", (event) => {
-      console.error("[worker] Miner snapshot worker error", event);
+      logger.error({ err: event }, "snapshot.worker.error");
     });
     snapshotWorker = worker;
     return snapshotWorker;
   } catch (error) {
-    console.error("[startup] Failed to spawn miner snapshot worker", error);
+    logger.error({ err: error }, "snapshot.worker.spawn.failed");
     snapshotWorker = null;
     return null;
   }
