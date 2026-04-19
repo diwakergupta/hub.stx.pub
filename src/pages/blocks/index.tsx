@@ -16,6 +16,7 @@ import {
   LineChart,
   ReferenceArea,
   ReferenceLine,
+  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -689,70 +690,71 @@ export function BlocksPage() {
           }
         >
           <Chart.Root chart={costChart} h="100%">
-            <LineChart
-              data={costChart.data}
-              margin={{ left: 16, right: 16 }}
-              onMouseDown={costZoom.onMouseDown}
-              onMouseMove={costZoom.onMouseMove}
-              onMouseUp={costZoom.onMouseUp}
-              onDoubleClick={costZoom.onDoubleClick}
-              style={{
-                cursor: costZoom.referenceArea
-                  ? "crosshair"
-                  : costZoom.hasCustomDomain
-                    ? "grab"
-                    : "default",
-              }}
-            >
-              <XAxis
-                dataKey="blockHeight"
-                type="number"
-                domain={costZoom.xDomain}
-                allowDataOverflow
-              />
-              <YAxis
-                yAxisId="cost"
-                width={60}
-                domain={costZoom.getYDomain("cost")}
-              />
-              <YAxis yAxisId="cost" domain={[0, "auto"]} width={60} />
-              <YAxis yAxisId="size" orientation="right" width={80} />
-              <Tooltip content={<Chart.Tooltip />} />
-              <Legend content={<Chart.Legend />} />
-              {costZoom.referenceArea ? (
-                <ReferenceArea
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={costChart.data}
+                margin={{ left: 16, right: 16 }}
+                onMouseDown={costZoom.onMouseDown}
+                onMouseMove={costZoom.onMouseMove}
+                onMouseUp={costZoom.onMouseUp}
+                onDoubleClick={costZoom.onDoubleClick}
+                style={{
+                  cursor: costZoom.referenceArea
+                    ? "crosshair"
+                    : costZoom.hasCustomDomain
+                      ? "grab"
+                      : "default",
+                }}
+              >
+                <XAxis
+                  dataKey="blockHeight"
+                  type="number"
+                  domain={costZoom.xDomain}
+                  allowDataOverflow
+                />
+                <YAxis
                   yAxisId="cost"
-                  x1={costZoom.referenceArea[0]}
-                  x2={costZoom.referenceArea[1]}
-                  stroke="transparent"
-                  fill="rgba(66, 153, 225, 0.18)"
+                  width={60}
+                  domain={costZoom.getYDomain("cost")}
                 />
-              ) : null}
-              {tenureChangeHeights.map((height) => (
-                <ReferenceLine
-                  key={`tenure-${height}`}
-                  x={height}
-                  yAxisId="cost"
-                  stroke={costChart.color("gray.400")}
-                  strokeDasharray="4 4"
-                  strokeWidth={2}
-                />
-              ))}
-              {costSeries.map((series) => (
-                <Line
-                  key={series.name.toString()}
-                  type="monotone"
-                  dataKey={series.name as string}
-                  name={series.label}
-                  stroke={costChart.color(series.color)}
-                  strokeDasharray={series.strokeDasharray}
-                  strokeWidth={1.5}
-                  yAxisId={series.yAxisId}
-                  dot={false}
-                  isAnimationActive={false}
-                />
-              ))}
-            </LineChart>
+                <YAxis yAxisId="size" orientation="right" width={80} />
+                <Tooltip content={<Chart.Tooltip />} />
+                <Legend content={<Chart.Legend />} />
+                {costZoom.referenceArea ? (
+                  <ReferenceArea
+                    yAxisId="cost"
+                    x1={costZoom.referenceArea[0]}
+                    x2={costZoom.referenceArea[1]}
+                    stroke="transparent"
+                    fill="rgba(66, 153, 225, 0.18)"
+                  />
+                ) : null}
+                {tenureChangeHeights.map((height) => (
+                  <ReferenceLine
+                    key={`tenure-${height}`}
+                    x={height}
+                    yAxisId="cost"
+                    stroke={costChart.color("gray.400")}
+                    strokeDasharray="4 4"
+                    strokeWidth={2}
+                  />
+                ))}
+                {costSeries.map((series) => (
+                  <Line
+                    key={series.name.toString()}
+                    type="monotone"
+                    dataKey={series.name as string}
+                    name={series.label}
+                    stroke={costChart.color(series.color)}
+                    strokeDasharray={series.strokeDasharray}
+                    strokeWidth={1.5}
+                    yAxisId={series.yAxisId}
+                    dot={false}
+                    isAnimationActive={false}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
           </Chart.Root>
         </ChartCard>
 
@@ -768,71 +770,72 @@ export function BlocksPage() {
           }
         >
           <Chart.Root chart={tenureChart} h="100%">
-            <LineChart
-              data={tenureChart.data}
-              margin={{ left: 16, right: 16 }}
-              onMouseDown={tenureZoom.onMouseDown}
-              onMouseMove={tenureZoom.onMouseMove}
-              onMouseUp={tenureZoom.onMouseUp}
-              onDoubleClick={tenureZoom.onDoubleClick}
-              style={{
-                cursor: tenureZoom.referenceArea
-                  ? "crosshair"
-                  : tenureZoom.hasCustomDomain
-                    ? "grab"
-                    : "default",
-              }}
-            >
-              <XAxis
-                dataKey="blockHeight"
-                type="number"
-                domain={tenureZoom.xDomain}
-                allowDataOverflow
-              />
-              <YAxis
-                yAxisId="cost"
-                width={60}
-                domain={tenureZoom.getYDomain("cost")}
-              />
-              <YAxis yAxisId="cost" width={60} />
-              <YAxis yAxisId="fees" orientation="right" width={80} />
-              <Tooltip content={<Chart.Tooltip />} />
-              <Legend content={<Chart.Legend />} />
-              {tenureZoom.referenceArea ? (
-                <ReferenceArea
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={tenureChart.data}
+                margin={{ left: 16, right: 16 }}
+                onMouseDown={tenureZoom.onMouseDown}
+                onMouseMove={tenureZoom.onMouseMove}
+                onMouseUp={tenureZoom.onMouseUp}
+                onDoubleClick={tenureZoom.onDoubleClick}
+                style={{
+                  cursor: tenureZoom.referenceArea
+                    ? "crosshair"
+                    : tenureZoom.hasCustomDomain
+                      ? "grab"
+                      : "default",
+                }}
+              >
+                <XAxis
+                  dataKey="blockHeight"
+                  type="number"
+                  domain={tenureZoom.xDomain}
+                  allowDataOverflow
+                />
+                <YAxis
                   yAxisId="cost"
-                  x1={tenureZoom.referenceArea[0]}
-                  x2={tenureZoom.referenceArea[1]}
-                  stroke="transparent"
-                  fill="rgba(72, 187, 120, 0.2)"
+                  width={60}
+                  domain={tenureZoom.getYDomain("cost")}
                 />
-              ) : null}
-              {tenureChangeHeights.map((height) => (
-                <ReferenceLine
-                  key={`tenure-fees-${height}`}
-                  x={height}
-                  yAxisId="cost"
-                  stroke={tenureChart.color("gray.400")}
-                  strokeDasharray="4 4"
-                  strokeWidth={2}
-                />
-              ))}
-              {tenureSeries.map((series) => (
-                <Line
-                  key={series.name.toString()}
-                  type="monotone"
-                  dataKey={series.name as string}
-                  name={series.label}
-                  stroke={tenureChart.color(series.color)}
-                  strokeDasharray={series.strokeDasharray}
-                  strokeWidth={1.5}
-                  yAxisId={series.yAxisId}
-                  dot={false}
-                  isAnimationActive={false}
-                  connectNulls
-                />
-              ))}
-            </LineChart>
+                <YAxis yAxisId="fees" orientation="right" width={80} />
+                <Tooltip content={<Chart.Tooltip />} />
+                <Legend content={<Chart.Legend />} />
+                {tenureZoom.referenceArea ? (
+                  <ReferenceArea
+                    yAxisId="cost"
+                    x1={tenureZoom.referenceArea[0]}
+                    x2={tenureZoom.referenceArea[1]}
+                    stroke="transparent"
+                    fill="rgba(72, 187, 120, 0.2)"
+                  />
+                ) : null}
+                {tenureChangeHeights.map((height) => (
+                  <ReferenceLine
+                    key={`tenure-fees-${height}`}
+                    x={height}
+                    yAxisId="cost"
+                    stroke={tenureChart.color("gray.400")}
+                    strokeDasharray="4 4"
+                    strokeWidth={2}
+                  />
+                ))}
+                {tenureSeries.map((series) => (
+                  <Line
+                    key={series.name.toString()}
+                    type="monotone"
+                    dataKey={series.name as string}
+                    name={series.label}
+                    stroke={tenureChart.color(series.color)}
+                    strokeDasharray={series.strokeDasharray}
+                    strokeWidth={1.5}
+                    yAxisId={series.yAxisId}
+                    dot={false}
+                    isAnimationActive={false}
+                    connectNulls
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
           </Chart.Root>
         </ChartCard>
 
@@ -847,77 +850,79 @@ export function BlocksPage() {
           }
         >
           <Chart.Root chart={timestampChart} h="100%">
-            <LineChart
-              data={timestampChart.data}
-              margin={{ left: 16, right: 16, top: 12, bottom: 12 }}
-              onMouseDown={timestampZoom.onMouseDown}
-              onMouseMove={timestampZoom.onMouseMove}
-              onMouseUp={timestampZoom.onMouseUp}
-              onDoubleClick={timestampZoom.onDoubleClick}
-              style={{
-                cursor: timestampZoom.referenceArea
-                  ? "crosshair"
-                  : timestampZoom.hasCustomDomain
-                    ? "grab"
-                    : "default",
-              }}
-            >
-              <XAxis
-                dataKey="blockHeight"
-                type="number"
-                domain={timestampZoom.xDomain}
-                allowDataOverflow
-              />
-              <YAxis
-                yAxisId="time"
-                tickFormatter={timestampChart.formatDate(datetimeFormatOptions)}
-                width={120}
-                domain={
-                  timestampZoom.hasCustomDomain
-                    ? timestampZoom.getYDomain("time")
-                    : timestampDomain
-                }
-              />
-              <Tooltip
-                content={
-                  <Chart.Tooltip
-                    formatter={timestampChart.formatDate(datetimeFormatOptions)}
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={timestampChart.data}
+                margin={{ left: 16, right: 16, top: 12, bottom: 12 }}
+                onMouseDown={timestampZoom.onMouseDown}
+                onMouseMove={timestampZoom.onMouseMove}
+                onMouseUp={timestampZoom.onMouseUp}
+                onDoubleClick={timestampZoom.onDoubleClick}
+                style={{
+                  cursor: timestampZoom.referenceArea
+                    ? "crosshair"
+                    : timestampZoom.hasCustomDomain
+                      ? "grab"
+                      : "default",
+                }}
+              >
+                <XAxis
+                  dataKey="blockHeight"
+                  type="number"
+                  domain={timestampZoom.xDomain}
+                  allowDataOverflow
+                />
+                <YAxis
+                  yAxisId="time"
+                  tickFormatter={timestampChart.formatDate(datetimeFormatOptions)}
+                  width={120}
+                  domain={
+                    timestampZoom.hasCustomDomain
+                      ? timestampZoom.getYDomain("time")
+                      : timestampDomain
+                  }
+                />
+                <Tooltip
+                  content={
+                    <Chart.Tooltip
+                      formatter={timestampChart.formatDate(datetimeFormatOptions)}
+                    />
+                  }
+                />
+                <Legend content={<Chart.Legend />} />
+                {timestampZoom.referenceArea ? (
+                  <ReferenceArea
+                    yAxisId="time"
+                    x1={timestampZoom.referenceArea[0]}
+                    x2={timestampZoom.referenceArea[1]}
+                    stroke="transparent"
+                    fill="rgba(102, 126, 234, 0.2)"
                   />
-                }
-              />
-              <Legend content={<Chart.Legend />} />
-              {timestampZoom.referenceArea ? (
-                <ReferenceArea
-                  yAxisId="time"
-                  x1={timestampZoom.referenceArea[0]}
-                  x2={timestampZoom.referenceArea[1]}
-                  stroke="transparent"
-                  fill="rgba(102, 126, 234, 0.2)"
-                />
-              ) : null}
-              {tenureChangeHeights.map((height) => (
-                <ReferenceLine
-                  key={`tenure-time-${height}`}
-                  x={height}
-                  yAxisId="time"
-                  stroke={timestampChart.color("gray.400")}
-                  strokeDasharray="4 4"
-                />
-              ))}
-              {timestampSeries.map((series) => (
-                <Line
-                  key={series.name.toString()}
-                  type="monotone"
-                  dataKey={series.name as string}
-                  name={series.label}
-                  stroke={timestampChart.color(series.color)}
-                  strokeWidth={2}
-                  yAxisId="time"
-                  dot={false}
-                  isAnimationActive={false}
-                />
-              ))}
-            </LineChart>
+                ) : null}
+                {tenureChangeHeights.map((height) => (
+                  <ReferenceLine
+                    key={`tenure-time-${height}`}
+                    x={height}
+                    yAxisId="time"
+                    stroke={timestampChart.color("gray.400")}
+                    strokeDasharray="4 4"
+                  />
+                ))}
+                {timestampSeries.map((series) => (
+                  <Line
+                    key={series.name.toString()}
+                    type="monotone"
+                    dataKey={series.name as string}
+                    name={series.label}
+                    stroke={timestampChart.color(series.color)}
+                    strokeWidth={2}
+                    yAxisId="time"
+                    dot={false}
+                    isAnimationActive={false}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
           </Chart.Root>
         </ChartCard>
 
@@ -926,35 +931,37 @@ export function BlocksPage() {
           description="Distribution of inter-block arrival times on a logarithmic scale."
         >
           <Chart.Root chart={arrivalChart} h="100%">
-            <LineChart
-              data={arrivalChart.data}
-              margin={{ left: 16, right: 16, top: 12, bottom: 12 }}
-            >
-              <XAxis
-                dataKey="seconds"
-                type="number"
-                scale="log"
-                domain={cdfDomain}
-                allowDataOverflow
-                ticks={cdfTicks}
-              />
-              <YAxis width={60} domain={[0, 100]} />
-              <Tooltip content={<Chart.Tooltip />} />
-              <Legend content={<Chart.Legend />} />
-              {cdfSeries.map((series) => (
-                <Line
-                  key={series.name.toString()}
-                  type="monotone"
-                  dataKey={series.name as string}
-                  name={series.label}
-                  stroke={arrivalChart.color(series.color)}
-                  strokeWidth={2}
-                  dot={false}
-                  isAnimationActive={false}
-                  connectNulls
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={arrivalChart.data}
+                margin={{ left: 16, right: 16, top: 12, bottom: 12 }}
+              >
+                <XAxis
+                  dataKey="seconds"
+                  type="number"
+                  scale="log"
+                  domain={cdfDomain}
+                  allowDataOverflow
+                  ticks={cdfTicks}
                 />
-              ))}
-            </LineChart>
+                <YAxis width={60} domain={[0, 100]} />
+                <Tooltip content={<Chart.Tooltip />} />
+                <Legend content={<Chart.Legend />} />
+                {cdfSeries.map((series) => (
+                  <Line
+                    key={series.name.toString()}
+                    type="monotone"
+                    dataKey={series.name as string}
+                    name={series.label}
+                    stroke={arrivalChart.color(series.color)}
+                    strokeWidth={2}
+                    dot={false}
+                    isAnimationActive={false}
+                    connectNulls
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
           </Chart.Root>
         </ChartCard>
       </Stack>
