@@ -1,6 +1,5 @@
 {
   "lockfileVersion": 1,
-  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "bun-react-template",
@@ -141,7 +140,7 @@
 
     "@types/use-sync-external-store": ["@types/use-sync-external-store@0.0.6", "", {}, "sha512-zFDAD+tlpf2r4asuHEj0XH6pY6i0g5NeAHPn+15wk3BV6JA69eERFXC1gyGThDkVa1zCyKr5jox1+2LbV/AMLg=="],
 
-    "@viz-js/viz": ["@viz-js/viz@3.25.0", "", {}, "sha512-dM7zAYMdf7mcRz5Kdb+YJb6+qv5Rjk0rPZ18gROdpMrP/3S7RFOp8uxybeiz5RypHrE1zo1vccA8Twh4mIcLZw=="],
+    "@viz-js/viz": ["@viz-js/viz@3.26.0", "", {}, "sha512-q/m3rj4aTs38yezZsWABRSsI1auZIWXk5X2aOdz9B7oPR1eYIn9JMEBXY/HbTJwhgS1vEOESC+m0eO6p3imFyQ=="],
 
     "@zag-js/accordion": ["@zag-js/accordion@1.38.2", "", { "dependencies": { "@zag-js/anatomy": "1.38.2", "@zag-js/core": "1.38.2", "@zag-js/dom-query": "1.38.2", "@zag-js/types": "1.38.2", "@zag-js/utils": "1.38.2" } }, "sha512-lr3K8R4c8cY1ghcU4lpav4dAXCFqFcNOrieqy4lsS5n5CSrpLbL1EFrOdTBux/CCeijmipFp14ddUZGHWHIDJQ=="],
 
