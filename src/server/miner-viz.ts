@@ -1,4 +1,4 @@
-import { Database, type Statement } from "bun:sqlite";
+import { Database } from "bun:sqlite";
 
 export interface MinerVizSnapshot {
   generatedAt: string;
@@ -165,8 +165,8 @@ function processWinningCommit(
   parentCommit: BlockCommit | undefined,
   stacksHeight: number,
   consensusHash: string,
-  paymentStmt: Statement<PaymentRow>,
-  feesStmt: Statement<FeesRow>,
+  paymentStmt: import("bun:sqlite").Statement<PaymentRow>,
+  feesStmt: import("bun:sqlite").Statement<FeesRow>,
 ) {
   commit.won = true;
   commit.potentialTip = true;
