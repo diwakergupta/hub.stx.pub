@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { generateDot, type BlockCommits } from "@/server/miner-viz";
+import { generateDot } from "@/server/miner-viz";
 
 test("generateDot produces valid DOT structure", () => {
-  const emptyCommits: BlockCommits = {
+  const emptyCommits = {
     sortitionFeesMap: new Map(),
     allCommits: new Map(),
     commitsByBlock: new Map(),
