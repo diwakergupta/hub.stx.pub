@@ -15,8 +15,12 @@ test("pruneSnapshots removes rows older than a day", () => {
       bitcoinBlockHeight: 123,
       sortitionId: "abc",
       minerPower: {
+        formatVersion: 2,
         generatedAt: "",
         windowSize: 10,
+        bitcoinBlocksObserved: 10,
+        noSortitionBlocks: 0,
+        noSortitionRate: 0,
         bitcoinBlockHeight: 123,
         sortitionId: "abc",
         items: [],
