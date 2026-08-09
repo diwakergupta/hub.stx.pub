@@ -1,23 +1,27 @@
 import { Database } from "bun:sqlite";
 import type { MinerPowerSnapshot } from "@/shared/miner-power";
+import { loadCanonicalSortitions } from "./canonical-sortitions";
 
-export const MINER_POWER_WINDOW = 144;
+export const MINER_POWER_BITCOIN_WINDOW = 144 * 7;
+export const MINER_POWER_FORMAT_VERSION = 2;
 
 export interface MinerAddressMaps {
   stacksToBtc: Map<string, string>;
-  btcToStacks: Map<string, Set<string>>;
+  btcToStacks: Map<string, string>;
 }
 
 interface BlockAggregateRow {
   burn_header_height: number;
+  consensus_hash: string;
   address: string;
-  burnchain_commit_burn: number;
   stx_reward: number;
 }
 
 interface BurnFeeRow {
+  txid: string;
   sender: string;
-  total_burn_fee: number;
+  burn_fee: number;
+  sortition_id: string;
 }
 
 interface AddressMapRow {
@@ -32,10 +36,10 @@ export function escapeSqliteString(input: string): string {
 export function buildMinerAddressMaps(
   chainstateDb: Database,
   sortitionPath: string,
-  limit = MINER_POWER_WINDOW * 4,
+  limit = MINER_POWER_BITCOIN_WINDOW,
 ): MinerAddressMaps {
   const stacksToBtc = new Map<string, string>();
-  const btcToStacks = new Map<string, Set<string>>();
+  const btcToStacks = new Map<string, string>();
 
   // CODEX: DO NOT MODIFY THE NEXT LINE
   const escaped = escapeSqliteString(`${sortitionPath}`);
@@ -43,40 +47,63 @@ export function buildMinerAddressMaps(
 
   try {
     const stmt = chainstateDb.prepare<AddressMapRow>(
-      `WITH recent_payments AS (
-          SELECT recipient, index_block_hash
+      `WITH RECURSIVE canonical_sortitions AS (
+          SELECT tip.sortition_id, tip.parent_sortition_id, tip.consensus_hash, tip.block_height,
+                 tip.winning_block_txid, tip.sortition, tip.sortition AS wins_seen
+          FROM (
+            SELECT sortition_id, parent_sortition_id, consensus_hash, block_height,
+                   winning_block_txid, sortition
+            FROM sortition.snapshots
+            WHERE pox_valid = 1
+            ORDER BY block_height DESC, burn_header_hash ASC
+            LIMIT 1
+          ) AS tip
+          UNION ALL
+          SELECT parent.sortition_id, parent.parent_sortition_id, parent.consensus_hash,
+                 parent.block_height, parent.winning_block_txid, parent.sortition,
+                 child.wins_seen + parent.sortition
+          FROM sortition.snapshots AS parent
+          JOIN canonical_sortitions AS child
+            ON parent.sortition_id = child.parent_sortition_id
+          WHERE child.wins_seen < ?
+        ), recent_payments AS (
+          SELECT payments.recipient, canonical_sortitions.winning_block_txid
           FROM payments
-          WHERE recipient IS NOT NULL
-          ORDER BY stacks_block_height DESC
+          JOIN nakamoto_block_headers
+            ON payments.index_block_hash = nakamoto_block_headers.index_block_hash
+          JOIN canonical_sortitions
+            ON nakamoto_block_headers.consensus_hash = canonical_sortitions.consensus_hash
+          WHERE payments.recipient IS NOT NULL AND payments.miner = 1
+          ORDER BY canonical_sortitions.block_height DESC
           LIMIT ?
         )
         SELECT
           recent_payments.recipient AS stacksAddress,
           TRIM(sortition.block_commits.apparent_sender, '"') AS bitcoinAddress
         FROM recent_payments
-        LEFT JOIN nakamoto_block_headers
-          ON recent_payments.index_block_hash = nakamoto_block_headers.index_block_hash
-        LEFT JOIN sortition.snapshots
-          ON nakamoto_block_headers.consensus_hash = sortition.snapshots.consensus_hash
         LEFT JOIN sortition.block_commits
-          ON sortition.snapshots.winning_block_txid = sortition.block_commits.txid
+          ON recent_payments.winning_block_txid = sortition.block_commits.txid
         `,
     );
 
-    const rows = stmt.all(limit);
+    const rows = stmt.all(limit, limit);
     for (const row of rows) {
       const stacksAddr = row.stacksAddress;
       if (!stacksAddr) continue;
       const btcAddr = row.bitcoinAddress;
-      if (!btcAddr || stacksToBtc.has(stacksAddr)) {
+      if (!btcAddr) {
         continue;
       }
 
-      stacksToBtc.set(stacksAddr, btcAddr);
-      if (!btcToStacks.has(btcAddr)) {
-        btcToStacks.set(btcAddr, new Set());
+      if (!stacksToBtc.has(stacksAddr)) {
+        stacksToBtc.set(stacksAddr, btcAddr);
       }
-      btcToStacks.get(btcAddr)!.add(stacksAddr);
+      // Rows are newest first. A sender belongs to one latest recipient so
+      // each commit is counted once, while a recipient can retain multiple
+      // historical senders after rotating its Bitcoin address.
+      if (!btcToStacks.has(btcAddr)) {
+        btcToStacks.set(btcAddr, stacksAddr);
+      }
     }
   } finally {
     chainstateDb.exec("DETACH DATABASE sortition");
@@ -88,8 +115,7 @@ export function buildMinerAddressMaps(
 interface ComputeMinerPowerParams {
   chainstateDb: Database;
   sortitionDb: Database;
-  lowerBound: number;
-  windowSize?: number;
+  bitcoinWindowSize?: number;
   maps: MinerAddressMaps;
   bitcoinBlockHeight: number;
   sortitionId: string | null;
@@ -99,72 +125,109 @@ interface ComputeMinerPowerParams {
 export function computeMinerPowerSnapshot({
   chainstateDb,
   sortitionDb,
-  lowerBound,
-  windowSize = MINER_POWER_WINDOW,
+  bitcoinWindowSize = MINER_POWER_BITCOIN_WINDOW,
   maps,
   bitcoinBlockHeight,
   sortitionId,
   generatedAt,
 }: ComputeMinerPowerParams): MinerPowerSnapshot {
+  const effectiveLowerBound = Math.max(
+    0,
+    bitcoinBlockHeight - bitcoinWindowSize,
+  );
+  const canonicalSortitions = loadCanonicalSortitions(
+    sortitionDb,
+    effectiveLowerBound,
+    bitcoinBlockHeight,
+  );
+  const winningSortitions = canonicalSortitions.filter(
+    row => row.sortition,
+  );
+  const windowSize = winningSortitions.length;
+  const bitcoinBlocksObserved = canonicalSortitions.length;
+  const noSortitionBlocks = bitcoinBlocksObserved - windowSize;
+
   const baseQuery = `WITH recent_tenure_changes AS (
-        SELECT burn_header_height, index_block_hash
+        SELECT burn_header_height, consensus_hash, index_block_hash
         FROM nakamoto_block_headers
         WHERE tenure_changed = 1
           AND burn_header_height > ?
+          AND burn_header_height <= ?
         ORDER BY burn_header_height DESC
-        LIMIT ?
       )
       SELECT
         recent_tenure_changes.burn_header_height,
+        recent_tenure_changes.consensus_hash,
         payments.recipient AS address,
-        payments.burnchain_commit_burn,
         payments.coinbase + payments.tx_fees_anchored + payments.tx_fees_streamed AS stx_reward
       FROM recent_tenure_changes
       JOIN payments ON payments.index_block_hash = recent_tenure_changes.index_block_hash
+        AND payments.miner = 1
       ORDER BY recent_tenure_changes.burn_header_height DESC`;
 
   const blockStmt = chainstateDb.prepare<BlockAggregateRow>(baseQuery);
-  const blockRows = blockStmt.all(lowerBound, windowSize);
+  const blockRows = blockStmt.all(effectiveLowerBound, bitcoinBlockHeight);
+  const canonicalConsensusHashes = new Set(
+    winningSortitions.map(row => row.consensusHash),
+  );
+  const canonicalSortitionIds = new Set(
+    winningSortitions.map(row => row.sortitionId),
+  );
 
   const btcSpent = new Map<string, number>();
   const stxEarned = new Map<string, number>();
   const blocksWon = new Map<string, number>();
+  const recipientByConsensus = new Map<string, string>();
 
-  let countedRows = 0;
   for (const row of blockRows) {
-    if (row.burn_header_height <= lowerBound) {
+    if (!canonicalConsensusHashes.has(row.consensus_hash)) {
+      continue;
+    }
+    if (row.burn_header_height <= effectiveLowerBound) {
       continue;
     }
     const addr = row.address;
     if (!addr) {
       continue;
     }
-    blocksWon.set(addr, (blocksWon.get(addr) ?? 0) + 1);
-    btcSpent.set(addr, (btcSpent.get(addr) ?? 0) + row.burnchain_commit_burn);
+    recipientByConsensus.set(row.consensus_hash, addr);
     stxEarned.set(addr, (stxEarned.get(addr) ?? 0) + row.stx_reward);
-    countedRows += 1;
   }
 
+  const winningDetails = new Map(
+    winningSortitions.map(row => [row.sortitionId, row]),
+  );
+  let countedRows = 0;
+
   const burnFeeStmt = sortitionDb.prepare<BurnFeeRow>(
-    `SELECT TRIM(sender, '"') AS sender, SUM(total_burn_fee) AS total_burn_fee FROM (
-        SELECT TRIM(apparent_sender, '"') AS sender, burn_fee AS total_burn_fee
-        FROM block_commits
-        WHERE block_height > ?
-      )
-      GROUP BY sender`,
+    `SELECT txid, TRIM(apparent_sender, '"') AS sender, burn_fee, sortition_id
+     FROM block_commits
+     WHERE block_height > ? AND block_height <= ?`,
   );
 
-  const burnFeeRows = burnFeeStmt.all(lowerBound);
+  const burnFeeRows = burnFeeStmt.all(effectiveLowerBound, bitcoinBlockHeight);
   for (const row of burnFeeRows) {
+    if (!canonicalSortitionIds.has(row.sortition_id)) continue;
     const btcAddr = row.sender;
     if (!btcAddr) continue;
-    const stacksSet = maps.btcToStacks.get(btcAddr);
-    if (!stacksSet) {
+    const stacksAddr = maps.btcToStacks.get(btcAddr);
+    if (!stacksAddr) {
       continue;
     }
-    for (const stacksAddr of stacksSet) {
-      btcSpent.set(stacksAddr, row.total_burn_fee);
+    const winningSortition = winningDetails.get(row.sortition_id);
+    if (winningSortition?.winningBlockTxid === row.txid) {
+      const winnerRecipient =
+        recipientByConsensus.get(winningSortition.consensusHash) ?? stacksAddr;
+      blocksWon.set(
+        winnerRecipient,
+        (blocksWon.get(winnerRecipient) ?? 0) + 1,
+      );
+      countedRows += 1;
     }
+    btcSpent.set(
+      stacksAddr,
+      (btcSpent.get(stacksAddr) ?? 0) + Number(row.burn_fee),
+    );
   }
 
   const items = Array.from(blocksWon.entries()).map(([addr, won]) => {
@@ -183,10 +246,10 @@ export function computeMinerPowerSnapshot({
     };
   });
 
-  const missing = Math.max(0, windowSize - countedRows);
+  const missing = Math.max(0, winningSortitions.length - countedRows);
   if (missing > 0) {
     items.push({
-      stacksRecipient: "No Canonical Sortition",
+      stacksRecipient: "Unattributed Sortition",
       bitcoinAddress: null,
       blocksWon: missing,
       btcSpent: 0,
@@ -198,8 +261,15 @@ export function computeMinerPowerSnapshot({
   items.sort((a, b) => b.blocksWon - a.blocksWon);
 
   return {
+    formatVersion: MINER_POWER_FORMAT_VERSION,
     generatedAt: generatedAt ?? new Date().toISOString(),
     windowSize,
+    bitcoinBlocksObserved,
+    noSortitionBlocks,
+    noSortitionRate:
+      bitcoinBlocksObserved > 0
+        ? (noSortitionBlocks / bitcoinBlocksObserved) * 100
+        : 0,
     bitcoinBlockHeight,
     sortitionId,
     items,

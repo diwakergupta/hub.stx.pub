@@ -358,6 +358,11 @@ function MinerPowerView({ state }: { state: MinerPowerState }) {
   });
 
   const { payload } = state;
+  const bitcoinBlocksObserved =
+    payload.bitcoinBlocksObserved ?? payload.windowSize;
+  const noSortitionBlocks = payload.noSortitionBlocks ?? 0;
+  const noSortitionRate = payload.noSortitionRate ?? 0;
+  const isWeeklySnapshot = payload.formatVersion === 2;
 
   return (
     <Stack borderWidth="1px" borderRadius="lg" borderColor="gray.200" p={4}>
@@ -368,7 +373,9 @@ function MinerPowerView({ state }: { state: MinerPowerState }) {
       >
         <Stack>
           <Heading as="h3" size="md">
-            Miner Power · Last {payload.windowSize} Blocks
+            {isWeeklySnapshot
+              ? "Miner Power · Last ~1 Week"
+              : `Miner Power · Last ${payload.windowSize} Sortitions`}
           </Heading>
           <Text fontSize="sm" color="gray.500">
             Last Updated {new Date(payload.generatedAt).toLocaleString()}
@@ -449,6 +456,26 @@ function MinerPowerView({ state }: { state: MinerPowerState }) {
           </Table.Body>
         </Table.Root>
       </Table.ScrollArea>
+
+      <Stack
+        direction={{ base: "column", md: "row" }}
+        justify="space-between"
+        fontSize="sm"
+        color="gray.600"
+        borderTopWidth="1px"
+        borderColor="gray.100"
+        pt={3}
+      >
+        <Text>
+          {numberFmt.format(payload.windowSize)} sortitions across{" "}
+          {numberFmt.format(bitcoinBlocksObserved)} canonical Bitcoin
+          blocks
+        </Text>
+        <Text>
+          {numberFmt.format(noSortitionBlocks)} without a sortition (
+          {percentFmt.format(noSortitionRate / 100)})
+        </Text>
+      </Stack>
     </Stack>
   );
 }

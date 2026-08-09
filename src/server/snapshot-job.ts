@@ -3,10 +3,16 @@ import { Database } from "bun:sqlite";
 import { join } from "path";
 
 import type { MinerPowerSnapshot } from "@/shared/miner-power";
+import {
+  latestWinningSortition,
+  loadCanonicalSortitions,
+  loadCanonicalTip,
+} from "./canonical-sortitions";
 import { getStacksDataDir } from "./env";
 import { logger } from "./logger";
 import {
-  MINER_POWER_WINDOW,
+  MINER_POWER_BITCOIN_WINDOW,
+  MINER_POWER_FORMAT_VERSION,
   buildMinerAddressMaps,
   computeMinerPowerSnapshot,
   type MinerAddressMaps,
@@ -26,6 +32,7 @@ import {
 const snapshotLogger = logger.child({ component: "snapshot-job" });
 
 let cachedAddressMaps: MinerAddressMaps | null = null;
+let cachedAddressMapsSortitionId: string | null = null;
 let isRunning = false;
 let snapshotCron: Cron | null = null;
 const SNAPSHOT_INTERVAL_MINUTES = 1;
@@ -40,18 +47,13 @@ function openReadOnlyDatabase(path: string): Database {
   return db;
 }
 
-function getBlockRange(db: Database, windowSize: number) {
-  const stmt = db.prepare<{ maxHeight: number | null }, []>(
-    "SELECT MAX(block_height) AS maxHeight FROM block_commits",
-  );
-  const row = stmt.get();
-  const start = row?.maxHeight ?? 0;
-  const lowerBound = Math.max(0, start - windowSize);
-  return { start, lowerBound };
-}
-
-function updateAddressMaps(chainstateDb: Database, sortitionPath: string) {
+function updateAddressMaps(
+  chainstateDb: Database,
+  sortitionPath: string,
+  winningSortitionId: string,
+) {
   cachedAddressMaps = buildMinerAddressMaps(chainstateDb, sortitionPath);
+  cachedAddressMapsSortitionId = winningSortitionId;
 }
 
 function getAddressMaps(): MinerAddressMaps {
@@ -82,27 +84,71 @@ function generateSnapshot(dataDir: string) {
   try {
     sortitionDb = openReadOnlyDatabase(sortitionPath);
 
-    const { start } = getBlockRange(sortitionDb, MINER_VIZ_WINDOW);
-    if (start === 0) {
-      snapshotLogger.warn("snapshots.no-block-commits");
+    const canonicalTip = loadCanonicalTip(sortitionDb);
+    if (!canonicalTip) {
+      snapshotLogger.warn("snapshots.no-canonical-tip");
       return;
     }
+    const start = canonicalTip.blockHeight;
+    const canonicalWindow = loadCanonicalSortitions(
+      sortitionDb,
+      Math.max(0, start - MINER_POWER_BITCOIN_WINDOW),
+      start,
+    );
+    const winningTip = latestWinningSortition(canonicalWindow);
 
-    const latestSnapshot = loadLatestSnapshot(dataDir);
-    if (latestSnapshot?.bitcoinBlockHeight === start) {
-      snapshotLogger.info({ bitcoinBlockHeight: start }, "snapshots.already-exists");
+    if (!winningTip && !cachedAddressMaps) {
+      snapshotLogger.info(
+        { bitcoinBlockHeight: start },
+        "snapshots.waiting-for-first-sortition",
+      );
       return;
     }
 
     chainstateDb = openReadOnlyDatabase(chainstatePath);
+    if (winningTip) {
+      const paymentReady = chainstateDb
+        .prepare<{ ready: number }>(
+          `SELECT 1 AS ready
+           FROM payments
+           WHERE consensus_hash = ? AND miner = 1
+           LIMIT 1`,
+        )
+        .get(winningTip.consensusHash);
+      if (!paymentReady) {
+        snapshotLogger.info(
+          {
+            bitcoinBlockHeight: start,
+            winningSortitionId: winningTip.sortitionId,
+          },
+          "snapshots.waiting-for-chainstate",
+        );
+        return;
+      }
+    }
 
-    const addressMapStart = performance.now();
-    updateAddressMaps(chainstateDb, sortitionPath);
+    const latestSnapshot = loadLatestSnapshot(dataDir);
+    if (
+      latestSnapshot?.bitcoinBlockHeight === start &&
+      latestSnapshot.sortitionId === canonicalTip.sortitionId &&
+      latestSnapshot.minerPower.formatVersion === MINER_POWER_FORMAT_VERSION
+    ) {
+      snapshotLogger.info({ bitcoinBlockHeight: start }, "snapshots.already-exists");
+      return;
+    }
+
+    if (
+      winningTip &&
+      (!cachedAddressMaps ||
+        cachedAddressMapsSortitionId !== winningTip.sortitionId)
+    ) {
+      const addressMapStart = performance.now();
+      updateAddressMaps(chainstateDb, sortitionPath, winningTip.sortitionId);
+      logDuration("snapshots.address-map.complete", addressMapStart);
+    }
     const maps = getAddressMaps();
-    logDuration("snapshots.address-map.complete", addressMapStart);
 
     const lowerBoundViz = Math.max(0, start - MINER_VIZ_WINDOW);
-    const lowerBoundPower = Math.max(0, start - MINER_POWER_WINDOW);
 
     const vizStart = performance.now();
     const minerViz = computeMinerVizSnapshot({
@@ -118,10 +164,9 @@ function generateSnapshot(dataDir: string) {
     const minerPower = computeMinerPowerSnapshot({
       chainstateDb,
       sortitionDb,
-      lowerBound: lowerBoundPower,
       maps,
       bitcoinBlockHeight: start,
-      sortitionId: minerViz.sortitionId,
+      sortitionId: canonicalTip.sortitionId,
       generatedAt,
     });
     logDuration("snapshots.power-generation.complete", powerStart);
@@ -129,7 +174,7 @@ function generateSnapshot(dataDir: string) {
     insertSnapshot(dataDir, {
       generatedAt,
       bitcoinBlockHeight: start,
-      sortitionId: minerViz.sortitionId,
+      sortitionId: canonicalTip.sortitionId,
       minerPower,
       minerViz,
     });
@@ -139,7 +184,7 @@ function generateSnapshot(dataDir: string) {
     snapshotLogger.info(
       {
         bitcoinBlockHeight: start,
-        sortitionId: minerViz.sortitionId ?? null,
+        sortitionId: canonicalTip.sortitionId,
         generatedAt,
       },
       "snapshots.stored",

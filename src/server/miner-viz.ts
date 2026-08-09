@@ -1,4 +1,8 @@
 import { Database, type Statement } from "bun:sqlite";
+import {
+  latestWinningSortition,
+  loadCanonicalSortitions,
+} from "./canonical-sortitions";
 
 export interface MinerVizSnapshot {
   generatedAt: string;
@@ -186,7 +190,7 @@ function processWinningCommit(
     commit.coinbaseEarned = payment.coinbase ?? commit.coinbaseEarned;
   }
 
-  const feesRow = feesStmt.get(commit.burnBlockHeight);
+  const feesRow = feesStmt.get(consensusHash);
   if (feesRow?.tenure_tx_fees != null) {
     commit.feesEarned = feesRow.tenure_tx_fees;
   }
@@ -199,48 +203,59 @@ export function processWinningBlocks(
   startBlock: number,
   blockCommits: BlockCommits,
 ): SnapshotRow | undefined {
-  const snapshotStmt = sortitionDb.prepare<SnapshotRow>(
-    `SELECT winning_block_txid, canonical_stacks_tip_height, consensus_hash, sortition_id
-      FROM snapshots
-      WHERE block_height = ?`,
-  );
   const paymentStmt = chainstateDb.prepare<PaymentRow>(
-    "SELECT block_hash, coinbase FROM payments WHERE consensus_hash = ?",
+    `SELECT block_hash, coinbase
+     FROM payments
+     WHERE consensus_hash = ? AND miner = 1
+     LIMIT 1`,
   );
   const feesStmt = chainstateDb.prepare<FeesRow>(
     `SELECT tenure_tx_fees FROM nakamoto_block_headers
-      WHERE burn_header_height = ?
+      WHERE consensus_hash = ?
       ORDER BY height_in_tenure DESC
       LIMIT 1`,
+  );
+
+  const canonicalSnapshots = loadCanonicalSortitions(
+    sortitionDb,
+    Math.max(0, lowerBound - 1),
+    startBlock,
+  );
+  const snapshotsByHeight = new Map(
+    canonicalSnapshots.map(snapshot => [snapshot.blockHeight, snapshot]),
   );
 
   let latestSnapshot: SnapshotRow | undefined;
 
   for (let height = lowerBound; height <= startBlock; height += 1) {
+    const snapshot = snapshotsByHeight.get(height);
+    if (!snapshot) {
+      continue;
+    }
+    latestSnapshot = {
+      winning_block_txid: snapshot.winningBlockTxid,
+      canonical_stacks_tip_height: snapshot.canonicalStacksTipHeight,
+      consensus_hash: snapshot.consensusHash,
+      sortition_id: snapshot.sortitionId,
+    };
+
     const commits = blockCommits.commitsByBlock.get(height);
     if (!commits || commits.length === 0) {
       continue;
     }
 
-    const snapshot = snapshotStmt.get(height);
-    if (!snapshot) {
-      continue;
-    }
-
-    latestSnapshot = snapshot;
-
     for (const commit of commits) {
       commit.stacksHeight =
-        snapshot.canonical_stacks_tip_height ?? commit.stacksHeight;
+        snapshot.canonicalStacksTipHeight ?? commit.stacksHeight;
       const parentCommit = commit.parent
         ? blockCommits.allCommits.get(commit.parent)
         : undefined;
-      if (commit.txid === snapshot.winning_block_txid) {
+      if (commit.txid === snapshot.winningBlockTxid) {
         processWinningCommit(
           commit,
           parentCommit,
-          snapshot.canonical_stacks_tip_height,
-          snapshot.consensus_hash,
+          snapshot.canonicalStacksTipHeight,
+          snapshot.consensusHash,
           paymentStmt,
           feesStmt,
         );
@@ -256,15 +271,20 @@ export function processCanonicalTip(
   startBlock: number,
   commits: Map<string, BlockCommit>,
 ) {
-  const canonicalStmt = sortitionDb.prepare<{ winning_block_txid: string }>(
-    "SELECT winning_block_txid FROM snapshots WHERE block_height = ?",
+  const commitHeights = Array.from(commits.values(), commit => commit.burnBlockHeight);
+  const lowerBound =
+    commitHeights.length > 0 ? Math.min(...commitHeights) - 1 : startBlock - 1;
+  const canonicalSnapshots = loadCanonicalSortitions(
+    sortitionDb,
+    Math.max(0, lowerBound),
+    startBlock,
   );
-  const row = canonicalStmt.get(startBlock);
-  if (!row?.winning_block_txid) {
+  const winningTip = latestWinningSortition(canonicalSnapshots);
+  if (!winningTip) {
     return;
   }
 
-  let tipTxid = row.winning_block_txid;
+  let tipTxid = winningTip.winningBlockTxid;
   let isHead = true;
   while (tipTxid) {
     const commit = commits.get(tipTxid);
