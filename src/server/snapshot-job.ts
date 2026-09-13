@@ -1,4 +1,3 @@
-import { Cron } from "croner";
 import { Database } from "bun:sqlite";
 import { join } from "path";
 
@@ -34,7 +33,7 @@ const snapshotLogger = logger.child({ component: "snapshot-job" });
 let cachedAddressMaps: MinerAddressMaps | null = null;
 let cachedAddressMapsSortitionId: string | null = null;
 let isRunning = false;
-let snapshotCron: Cron | null = null;
+let snapshotCron: Bun.CronJob | null = null;
 const SNAPSHOT_INTERVAL_MINUTES = 1;
 
 function openReadOnlyDatabase(path: string): Database {
@@ -253,11 +252,18 @@ export function initializeSnapshotScheduler() {
     logDuration("startup.initial-snapshot.complete", initialSnapshotStart);
   });
 
-  snapshotCron = new Cron(`*/${SNAPSHOT_INTERVAL_MINUTES} * * * *`, async () => {
+  snapshotCron = Bun.cron(`*/${SNAPSHOT_INTERVAL_MINUTES} * * * *`, async () => {
     const refreshStart = performance.now();
     await runSnapshotGeneration();
     logDuration("scheduler.snapshot-refresh.complete", refreshStart);
   });
+}
+
+export function stopSnapshotScheduler() {
+  if (snapshotCron) {
+    snapshotCron.stop();
+    snapshotCron = null;
+  }
 }
 
 export function getCachedAddressMaps(): MinerAddressMaps | null {
