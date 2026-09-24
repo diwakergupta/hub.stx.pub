@@ -12,6 +12,7 @@ import {
   Layers,
   ArrowUpDown,
   Coins,
+  Info,
 } from "lucide-react";
 import type { MinerPowerSnapshot, MinerPowerItem } from "@/shared/miner-power";
 import type { MinerVizResponse } from "@/shared/miner-viz";
@@ -277,9 +278,17 @@ export function MinersPage({ realtimeEventCounter = 0 }: MinersPageProps) {
           <Card>
             <CardContent className="p-4 flex items-center justify-between">
               <div>
-                <span className="text-xs text-muted-foreground font-medium block mb-1">
-                  Total STX Distributed
-                </span>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="text-xs text-muted-foreground font-medium block">
+                    Total STX Rewards
+                  </span>
+                  <span
+                    className="cursor-help text-muted-foreground hover:text-foreground"
+                    title="Total miner revenue across the 1,008-block window: includes 1,000 STX coinbase per Bitcoin block (rewards from blocks with no sortition roll over into subsequent winning tenures) plus Nakamoto tenure transaction fees."
+                  >
+                    <Info className="w-3.5 h-3.5" />
+                  </span>
+                </div>
                 <span className="text-2xl font-bold font-mono tracking-tight text-foreground block">
                   {formatNumber(Math.round(totalStxEarned))}{" "}
                   <span className="text-xs font-normal text-muted-foreground">STX</span>
@@ -314,7 +323,7 @@ export function MinersPage({ realtimeEventCounter = 0 }: MinersPageProps) {
               <p className="text-xs text-muted-foreground mt-0.5">
                 Observed over {formatNumber(powerData.bitcoinBlocksObserved ?? powerData.windowSize)} canonical Bitcoin blocks (
                 {formatNumber(powerData.noSortitionBlocks ?? 0)} blocks without sortition,{" "}
-                {formatPercent((powerData.noSortitionRate ?? 0) / 100)})
+                {formatPercent((powerData.noSortitionRate ?? 0) / 100)}). Unmined block rewards from no-sortition blocks roll over to subsequent winning tenures.
               </p>
             </div>
 
@@ -355,7 +364,12 @@ export function MinersPage({ realtimeEventCounter = 0 }: MinersPageProps) {
                   </TableHead>
                   <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort("stxEarnt")}>
                     <div className="flex items-center justify-end gap-1">
-                      STX Earned
+                      <span
+                        className="cursor-help border-b border-dotted border-muted-foreground/60 inline-flex items-center gap-1"
+                        title="Coinbase block rewards (including 1K STX/block rollovers from no-sortition Bitcoin blocks) plus Nakamoto tenure transaction fees"
+                      >
+                        STX Earned
+                      </span>
                       <ArrowUpDown className="w-3 h-3 text-muted-foreground" />
                     </div>
                   </TableHead>
