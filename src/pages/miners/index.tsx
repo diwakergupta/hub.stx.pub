@@ -214,14 +214,22 @@ export function MinersPage({ realtimeEventCounter = 0 }: MinersPageProps) {
           <Card>
             <CardContent className="p-4 flex items-center justify-between">
               <div>
-                <span className="text-xs text-muted-foreground font-medium block">
-                  Bitcoin Block Height
-                </span>
-                <span className="text-2xl font-bold font-mono tracking-tight text-foreground">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="text-xs text-muted-foreground font-medium block">
+                    Bitcoin Block Height
+                  </span>
+                  <Badge variant={requestedHeight ? "secondary" : "outline"} className="text-[10px] py-0 px-1 font-mono font-normal">
+                    {requestedHeight ? "Historical" : "Tip"}
+                  </Badge>
+                </div>
+                <span className="text-2xl font-bold font-mono tracking-tight text-foreground block">
                   {powerData.bitcoinBlockHeight.toLocaleString()}
                 </span>
+                <span className="text-[11px] text-muted-foreground block mt-1">
+                  {requestedHeight ? `Snapshot at block #${requestedHeight}` : "Latest canonical consensus tip"}
+                </span>
               </div>
-              <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+              <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
                 <Layers className="w-5 h-5" />
               </div>
             </CardContent>
@@ -230,14 +238,17 @@ export function MinersPage({ realtimeEventCounter = 0 }: MinersPageProps) {
           <Card>
             <CardContent className="p-4 flex items-center justify-between">
               <div>
-                <span className="text-xs text-muted-foreground font-medium block">
-                  Active Miners (1 Week)
+                <span className="text-xs text-muted-foreground font-medium block mb-1">
+                  Active Miners
                 </span>
-                <span className="text-2xl font-bold font-mono tracking-tight text-foreground">
+                <span className="text-2xl font-bold font-mono tracking-tight text-foreground block">
                   {powerData.items.length}
                 </span>
+                <span className="text-[11px] text-muted-foreground block mt-1">
+                  Past 1,008 blocks (~1 week)
+                </span>
               </div>
-              <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500">
+              <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500 shrink-0">
                 <Award className="w-5 h-5" />
               </div>
             </CardContent>
@@ -246,15 +257,18 @@ export function MinersPage({ realtimeEventCounter = 0 }: MinersPageProps) {
           <Card>
             <CardContent className="p-4 flex items-center justify-between">
               <div>
-                <span className="text-xs text-muted-foreground font-medium block">
+                <span className="text-xs text-muted-foreground font-medium block mb-1">
                   Total BTC Spent
                 </span>
-                <span className="text-2xl font-bold font-mono tracking-tight text-foreground">
-                  {formatNumber(Math.round(totalSpendSats / 100_000_000 * 100) / 100)}{" "}
+                <span className="text-2xl font-bold font-mono tracking-tight text-foreground block">
+                  {formatNumber(Math.round((totalSpendSats / 100_000_000) * 100) / 100)}{" "}
                   <span className="text-xs font-normal text-muted-foreground">BTC</span>
                 </span>
+                <span className="text-[11px] text-muted-foreground block mt-1">
+                  Past 1,008 blocks (~1 week)
+                </span>
               </div>
-              <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-500">
+              <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-500 shrink-0">
                 <Flame className="w-5 h-5" />
               </div>
             </CardContent>
@@ -263,15 +277,18 @@ export function MinersPage({ realtimeEventCounter = 0 }: MinersPageProps) {
           <Card>
             <CardContent className="p-4 flex items-center justify-between">
               <div>
-                <span className="text-xs text-muted-foreground font-medium block">
+                <span className="text-xs text-muted-foreground font-medium block mb-1">
                   Total STX Distributed
                 </span>
-                <span className="text-2xl font-bold font-mono tracking-tight text-foreground">
+                <span className="text-2xl font-bold font-mono tracking-tight text-foreground block">
                   {formatNumber(Math.round(totalStxEarned))}{" "}
                   <span className="text-xs font-normal text-muted-foreground">STX</span>
                 </span>
+                <span className="text-[11px] text-muted-foreground block mt-1">
+                  Past 1,008 blocks (~1 week)
+                </span>
               </div>
-              <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+              <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-500 shrink-0">
                 <Coins className="w-5 h-5" />
               </div>
             </CardContent>

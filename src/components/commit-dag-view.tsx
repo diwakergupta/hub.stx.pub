@@ -11,10 +11,11 @@ import {
   Layers,
   Coins,
 } from "lucide-react";
-import type { MinerVizGraph, MinerVizNode } from "@/shared/miner-viz";
+import type { MinerVizBlock, MinerVizGraph, MinerVizNode } from "@/shared/miner-viz";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CommitDetailModal } from "./commit-detail-modal";
+import { BlockDetailModal } from "./block-detail-modal";
 import { formatNumber, stringToColor, truncateAddress } from "@/lib/utils";
 
 interface CommitDagViewProps {
@@ -36,6 +37,7 @@ export function CommitDagView({
   generatedAt,
 }: CommitDagViewProps) {
   const [selectedCommit, setSelectedCommit] = React.useState<MinerVizNode | null>(null);
+  const [selectedBlock, setSelectedBlock] = React.useState<MinerVizBlock | null>(null);
   const [hoveredMiner, setHoveredMiner] = React.useState<string | null>(null);
   const [hoveredTxid, setHoveredTxid] = React.useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = React.useState<number>(1);
@@ -313,24 +315,23 @@ export function CommitDagView({
             {sortedBlocks.map((block) => {
               const hasWinner = block.commits.some((c) => c.won);
               const commitMap = blockCommitsMap.get(block.height);
+              const targetStacksHeight = block.commits[0]?.stacksHeight ?? 0;
 
               return (
                 <div
                   key={block.height}
                   className="flex items-center gap-2.5 p-2 rounded-lg border border-border/50 bg-background/90 backdrop-blur-2xs transition-colors hover:border-border min-w-max w-full"
                 >
-                  {/* Left Block Header Badge (Fixed Compact Width) */}
-                  <div className="w-28 sm:w-32 shrink-0 pr-2 border-r border-border/60">
-                    <div className="flex items-center justify-between">
-                      <a
-                        href={`https://mempool.space/block/${block.height}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="font-mono text-xs font-bold text-foreground hover:text-primary transition-colors flex items-center gap-1"
-                      >
+                  {/* Left Block Header Badge (Clickable with Popover/Modal) */}
+                  <div
+                    onClick={() => setSelectedBlock(block)}
+                    className="w-32 sm:w-36 shrink-0 p-1.5 rounded-md hover:bg-muted/70 cursor-pointer transition-colors border-r border-border/60 group select-none"
+                    title="Click to view Bitcoin block & Stacks tenure details"
+                  >
+                    <div className="flex items-center justify-between leading-none">
+                      <span className="font-mono text-xs font-bold text-foreground group-hover:text-primary transition-colors flex items-center gap-1">
                         ₿ {block.height.toLocaleString()}
-                        <ExternalLink className="w-2.5 h-2.5 text-muted-foreground" />
-                      </a>
+                      </span>
                       {hasWinner ? (
                         <span className="text-[10px] px-1 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-mono font-semibold">
                           Won
@@ -342,7 +343,15 @@ export function CommitDagView({
                       )}
                     </div>
 
-                    <div className="mt-0.5 flex items-center justify-between text-[11px] text-muted-foreground font-mono">
+                    {/* Stacks target tip height */}
+                    <div className="mt-1 flex items-center justify-between text-[11px] font-mono leading-none">
+                      <span className="text-primary font-semibold truncate">
+                        STX #{targetStacksHeight > 0 ? targetStacksHeight.toLocaleString() : "—"}
+                      </span>
+                    </div>
+
+                    {/* Total spend and miner count */}
+                    <div className="mt-1 flex items-center justify-between text-[10px] text-muted-foreground font-mono leading-none">
                       <span>{formatNumber(Math.round(block.sortitionSpendSats / 1000))}K sats</span>
                       <span>{block.commits.length}m</span>
                     </div>
@@ -380,7 +389,7 @@ export function CommitDagView({
                               setHoveredMiner(null);
                             }}
                             onClick={() => setSelectedCommit(commit)}
-                            className={`h-[38px] px-2 py-1 rounded-md border text-xs cursor-pointer flex flex-col justify-between transition-all duration-150 ${
+                            className={`h-[42px] px-2 py-1 rounded-md border text-xs cursor-pointer flex flex-col justify-between transition-all duration-150 ${
                               commit.won
                                 ? "border-sky-500/80 bg-sky-500/10 shadow-xs ring-1 ring-sky-500/30"
                                 : "border-border/80 bg-card hover:border-primary/50 text-muted-foreground hover:text-foreground"
@@ -408,15 +417,18 @@ export function CommitDagView({
                               )}
                             </div>
 
-                            {/* Line 2: Stacks Height & Spend sats */}
+                            {/* Line 2: Sats Spent & Win Share % (Dropped redundant stacksHeight) */}
                             <div className="flex items-center justify-between text-[10px] font-mono leading-none text-muted-foreground">
-                              <span>
-                                {commit.stacksHeight > 0
-                                  ? `${Math.round(commit.stacksHeight / 1000)}k`
-                                  : "—"}
-                              </span>
                               <span className="font-medium text-foreground">
-                                {formatNumber(Math.round(commit.spendSats / 1000))}K
+                                {formatNumber(Math.round(commit.spendSats / 1000))}K sats
+                              </span>
+                              <span
+                                className="text-[10px] font-mono text-muted-foreground font-semibold"
+                                title="Sortition win probability in this block"
+                              >
+                                {block.sortitionSpendSats > 0
+                                  ? `${Math.round((commit.spendSats / block.sortitionSpendSats) * 100)}%`
+                                  : "—"}
                               </span>
                             </div>
                           </div>
@@ -427,7 +439,7 @@ export function CommitDagView({
                       return (
                         <div
                           key={sender}
-                          className="h-[38px] rounded-md border border-dashed border-border/20 bg-muted/5 flex items-center justify-center text-[10px] text-muted-foreground/30 font-mono select-none"
+                          className="h-[42px] rounded-md border border-dashed border-border/20 bg-muted/5 flex items-center justify-center text-[10px] text-muted-foreground/30 font-mono select-none"
                           title={`No commit from ${truncateAddress(sender, 4, 3)} in block ${block.height}`}
                         >
                           —
@@ -446,7 +458,7 @@ export function CommitDagView({
       <div className="px-4 py-2 border-t border-border bg-muted/20 flex items-center justify-between text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
           <Info className="w-3.5 h-3.5" />
-          Single-row compact layout · Hover a miner to highlight their commits · Click any node for transaction details.
+          Click the Bitcoin block for tenure summary · Click any miner node for transaction details.
         </span>
         <span className="font-mono text-[11px]">
           {graph.blocks.length} blocks · {graph.edges.length} ancestry edges
@@ -466,6 +478,13 @@ export function CommitDagView({
             }
           }
         }}
+      />
+
+      {/* Bitcoin Block & Sortition Detail Modal */}
+      <BlockDetailModal
+        block={selectedBlock}
+        onClose={() => setSelectedBlock(null)}
+        onSelectCommit={(commit) => setSelectedCommit(commit)}
       />
     </div>
   );
