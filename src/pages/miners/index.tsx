@@ -153,15 +153,15 @@ export function MinersPage({ realtimeEventCounter = 0 }: MinersPageProps) {
         </div>
 
         {/* Snapshot height navigator */}
-        <div className="flex items-center gap-2 bg-card border border-border rounded-lg p-1 shadow-xs">
+        <div className="flex items-center gap-1 sm:gap-2 bg-card border border-border rounded-lg p-1 shadow-xs shrink-0 max-w-full overflow-x-auto">
           <Button
             variant="ghost"
             size="sm"
             disabled={!currentHeight}
             onClick={() => currentHeight && setRequestedHeight(currentHeight - 1)}
-            className="h-8 gap-1 px-2.5 text-xs"
+            className="h-8 gap-1 px-2 text-xs shrink-0"
           >
-            <ChevronLeft className="w-3.5 h-3.5" /> Prev
+            <ChevronLeft className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Prev</span>
           </Button>
 
           <form
@@ -171,14 +171,14 @@ export function MinersPage({ realtimeEventCounter = 0 }: MinersPageProps) {
               const h = parseInt(val, 10);
               if (!isNaN(h) && h > 0) setRequestedHeight(h);
             }}
-            className="flex items-center gap-1"
+            className="flex items-center gap-1 shrink-0"
           >
             <Input
               name="height"
               key={currentHeight}
               defaultValue={currentHeight?.toString() || ""}
               placeholder="Block #"
-              className="h-8 w-24 text-xs font-mono text-center"
+              className="h-8 w-20 sm:w-24 text-xs font-mono text-center"
             />
             <Button variant="outline" size="sm" type="submit" className="h-8 px-2 text-xs">
               Go
@@ -190,20 +190,20 @@ export function MinersPage({ realtimeEventCounter = 0 }: MinersPageProps) {
             size="sm"
             disabled={!currentHeight}
             onClick={() => currentHeight && setRequestedHeight(currentHeight + 1)}
-            className="h-8 gap-1 px-2.5 text-xs"
+            className="h-8 gap-1 px-2 text-xs shrink-0"
           >
-            Next <ChevronRight className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Next</span> <ChevronRight className="w-3.5 h-3.5" />
           </Button>
 
-          <div className="w-px h-4 bg-border mx-1" />
+          <div className="w-px h-4 bg-border mx-0.5 sm:mx-1 shrink-0" />
 
           <Button
             variant={requestedHeight ? "secondary" : "ghost"}
             size="sm"
             onClick={() => setRequestedHeight(undefined)}
-            className="h-8 gap-1.5 px-2.5 text-xs text-primary font-medium"
+            className="h-8 gap-1 px-2 text-xs text-primary font-medium shrink-0"
           >
-            <RotateCw className="w-3 h-3" /> Latest
+            <RotateCw className="w-3 h-3" /> <span className="hidden sm:inline">Latest</span>
           </Button>
         </div>
       </div>

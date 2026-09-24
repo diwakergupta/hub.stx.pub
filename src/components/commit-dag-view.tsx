@@ -46,8 +46,8 @@ export function CommitDagView({
 
   const [nodePositions, setNodePositions] = React.useState<Map<string, AnchorPos>>(new Map());
   const [canvasSize, setCanvasSize] = React.useState<{ width: number; height: number }>({
-    width: 1200,
-    height: 1000,
+    width: 0,
+    height: 0,
   });
 
   // Extract miners for legend filter
@@ -76,6 +76,20 @@ export function CommitDagView({
     return [...graph.blocks].sort((a, b) => a.height - b.height);
   }, [graph.blocks]);
 
+  // Index commits by block height and sender for aligned swimlanes
+  const blockCommitsMap = React.useMemo(() => {
+    const map = new Map<number, Map<string, MinerVizNode>>();
+    for (const b of sortedBlocks) {
+      const senderMap = new Map<string, MinerVizNode>();
+      for (const c of b.commits) {
+        const cleanSender = c.sender.replace(/['"]/g, "").trim();
+        senderMap.set(cleanSender, c);
+      }
+      map.set(b.height, senderMap);
+    }
+    return map;
+  }, [sortedBlocks]);
+
   // Measure anchor positions for every card relative to unclipped contentRef
   const updatePositions = React.useCallback(() => {
     if (!contentRef.current) return;
@@ -101,11 +115,21 @@ export function CommitDagView({
   }, [zoomLevel]);
 
   React.useLayoutEffect(() => {
-    // Measure after DOM paint
-    const timer = setTimeout(updatePositions, 50);
+    updatePositions();
+    const timer = setTimeout(updatePositions, 60);
+
+    let observer: ResizeObserver | null = null;
+    if (contentRef.current && typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(() => {
+        updatePositions();
+      });
+      observer.observe(contentRef.current);
+    }
+
     window.addEventListener("resize", updatePositions);
     return () => {
       clearTimeout(timer);
+      if (observer) observer.disconnect();
       window.removeEventListener("resize", updatePositions);
     };
   }, [graph, zoomLevel, updatePositions]);
@@ -267,7 +291,7 @@ export function CommitDagView({
       >
         <div
           ref={contentRef}
-          className="relative p-6 min-w-max"
+          className="relative p-3 sm:p-5 min-w-full inline-block"
           style={{
             transform: `scale(${zoomLevel})`,
             transformOrigin: "top left",
@@ -285,17 +309,18 @@ export function CommitDagView({
           </svg>
 
           {/* Temporal Block Rows */}
-          <div className="relative z-10 space-y-4">
+          <div className="relative z-10 space-y-3.5">
             {sortedBlocks.map((block) => {
               const hasWinner = block.commits.some((c) => c.won);
+              const commitMap = blockCommitsMap.get(block.height);
 
               return (
                 <div
                   key={block.height}
-                  className="flex items-center gap-3 p-2 rounded-lg border border-border/50 bg-background/90 backdrop-blur-2xs transition-colors hover:border-border"
+                  className="flex items-center gap-2.5 p-2 rounded-lg border border-border/50 bg-background/90 backdrop-blur-2xs transition-colors hover:border-border min-w-max w-full"
                 >
                   {/* Left Block Header Badge (Fixed Compact Width) */}
-                  <div className="w-32 shrink-0 pr-2.5 border-r border-border/60">
+                  <div className="w-28 sm:w-32 shrink-0 pr-2 border-r border-border/60">
                     <div className="flex items-center justify-between">
                       <a
                         href={`https://mempool.space/block/${block.height}`}
@@ -323,70 +348,89 @@ export function CommitDagView({
                     </div>
                   </div>
 
-                  {/* Miner Commits: STRICT SINGLE-ROW NO-WRAP */}
-                  <div className="flex items-center gap-2 flex-nowrap shrink-0">
-                    {block.commits.map((commit) => {
-                      const cleanSender = commit.sender.replace(/['"]/g, "").trim();
-                      const minerColor = stringToColor(cleanSender);
-                      const isHovered =
-                        hoveredMiner === cleanSender || hoveredTxid === commit.txid;
-                      const isDimmed = hoveredMiner && hoveredMiner !== cleanSender;
+                  {/* Miner Commits: Aligned Swimlane Grid Columns */}
+                  <div
+                    className="grid gap-2 flex-1"
+                    style={{
+                      gridTemplateColumns: `repeat(${miners.length}, minmax(110px, 1fr))`,
+                    }}
+                  >
+                    {miners.map(([sender, info]) => {
+                      const commit = commitMap?.get(sender);
 
-                      return (
-                        <div
-                          key={commit.txid}
-                          ref={(el) => {
-                            if (el) cardRefs.current.set(commit.txid, el);
-                            else cardRefs.current.delete(commit.txid);
-                          }}
-                          onMouseEnter={() => {
-                            setHoveredTxid(commit.txid);
-                            setHoveredMiner(cleanSender);
-                          }}
-                          onMouseLeave={() => {
-                            setHoveredTxid(null);
-                            setHoveredMiner(null);
-                          }}
-                          onClick={() => setSelectedCommit(commit)}
-                          className={`w-[114px] h-[38px] px-2 py-1 rounded-md border text-xs shrink-0 cursor-pointer flex flex-col justify-between transition-all duration-150 ${
-                            commit.won
-                              ? "border-sky-500/80 bg-sky-500/10 shadow-xs ring-1 ring-sky-500/30"
-                              : "border-border/80 bg-card hover:border-primary/50 text-muted-foreground hover:text-foreground"
-                          } ${
-                            commit.tip ? "ring-2 ring-emerald-500/80 border-emerald-500" : ""
-                          } ${
-                            isHovered
-                              ? "scale-[1.04] shadow-md ring-2 ring-primary z-20 bg-accent text-accent-foreground"
-                              : ""
-                          } ${isDimmed ? "opacity-25" : "opacity-100"}`}
-                        >
-                          {/* Line 1: Miner Dot + Clean Address + Winner check */}
-                          <div className="flex items-center justify-between gap-1 leading-none">
-                            <div className="flex items-center gap-1.5 truncate">
-                              <span
-                                className="w-2 h-2 rounded-full shrink-0 ring-1 ring-border"
-                                style={{ backgroundColor: minerColor }}
-                              />
-                              <span className="font-mono text-[11px] font-semibold truncate">
-                                {truncateAddress(cleanSender, 4, 3)}
+                      if (commit) {
+                        const minerColor = info.color;
+                        const isHovered =
+                          hoveredMiner === sender || hoveredTxid === commit.txid;
+                        const isDimmed = hoveredMiner && hoveredMiner !== sender;
+
+                        return (
+                          <div
+                            key={commit.txid}
+                            ref={(el) => {
+                              if (el) cardRefs.current.set(commit.txid, el);
+                              else cardRefs.current.delete(commit.txid);
+                            }}
+                            onMouseEnter={() => {
+                              setHoveredTxid(commit.txid);
+                              setHoveredMiner(sender);
+                            }}
+                            onMouseLeave={() => {
+                              setHoveredTxid(null);
+                              setHoveredMiner(null);
+                            }}
+                            onClick={() => setSelectedCommit(commit)}
+                            className={`h-[38px] px-2 py-1 rounded-md border text-xs cursor-pointer flex flex-col justify-between transition-all duration-150 ${
+                              commit.won
+                                ? "border-sky-500/80 bg-sky-500/10 shadow-xs ring-1 ring-sky-500/30"
+                                : "border-border/80 bg-card hover:border-primary/50 text-muted-foreground hover:text-foreground"
+                            } ${
+                              commit.tip ? "ring-2 ring-emerald-500/80 border-emerald-500" : ""
+                            } ${
+                              isHovered
+                                ? "scale-[1.03] shadow-md ring-2 ring-primary z-20 bg-accent text-accent-foreground"
+                                : ""
+                            } ${isDimmed ? "opacity-25" : "opacity-100"}`}
+                          >
+                            {/* Line 1: Miner Dot + Clean Address + Winner check */}
+                            <div className="flex items-center justify-between gap-1 leading-none">
+                              <div className="flex items-center gap-1.5 truncate">
+                                <span
+                                  className="w-2 h-2 rounded-full shrink-0 ring-1 ring-border"
+                                  style={{ backgroundColor: minerColor }}
+                                />
+                                <span className="font-mono text-[11px] font-semibold truncate">
+                                  {truncateAddress(sender, 4, 3)}
+                                </span>
+                              </div>
+                              {commit.won && (
+                                <CheckCircle2 className="w-3 h-3 text-sky-600 dark:text-sky-400 shrink-0" />
+                              )}
+                            </div>
+
+                            {/* Line 2: Stacks Height & Spend sats */}
+                            <div className="flex items-center justify-between text-[10px] font-mono leading-none text-muted-foreground">
+                              <span>
+                                {commit.stacksHeight > 0
+                                  ? `${Math.round(commit.stacksHeight / 1000)}k`
+                                  : "—"}
+                              </span>
+                              <span className="font-medium text-foreground">
+                                {formatNumber(Math.round(commit.spendSats / 1000))}K
                               </span>
                             </div>
-                            {commit.won && (
-                              <CheckCircle2 className="w-3 h-3 text-sky-600 dark:text-sky-400 shrink-0" />
-                            )}
                           </div>
+                        );
+                      }
 
-                          {/* Line 2: Stacks Height & Spend sats */}
-                          <div className="flex items-center justify-between text-[10px] font-mono leading-none text-muted-foreground">
-                            <span>
-                              {commit.stacksHeight > 0
-                                ? `${Math.round(commit.stacksHeight / 1000)}k`
-                                : "—"}
-                            </span>
-                            <span className="font-medium text-foreground">
-                              {formatNumber(Math.round(commit.spendSats / 1000))}K
-                            </span>
-                          </div>
+                      {/* Empty Slot when miner did not commit in this block */}
+                      return (
+                        <div
+                          key={sender}
+                          className="h-[38px] rounded-md border border-dashed border-border/20 bg-muted/5 flex items-center justify-center text-[10px] text-muted-foreground/30 font-mono select-none"
+                          title={`No commit from ${truncateAddress(sender, 4, 3)} in block ${block.height}`}
+                        >
+                          —
                         </div>
                       );
                     })}

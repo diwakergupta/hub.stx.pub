@@ -23,16 +23,20 @@ function Header({
 }) {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur-md">
-      <div className="container mx-auto px-4 h-14 flex items-center justify-between">
+      <div className="w-full max-w-[1760px] mx-auto px-3 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-2">
         <div className="flex items-center gap-6">
-          <a href="/" className="flex items-center gap-2 font-bold text-base tracking-tight text-foreground hover:opacity-90 transition-opacity">
-            <span className="w-6 h-6 rounded-md bg-primary flex items-center justify-center text-primary-foreground font-mono font-bold text-xs shadow-xs">
+          <a
+            href="/"
+            className="flex items-center gap-2 font-bold text-base tracking-tight text-foreground hover:opacity-90 transition-opacity shrink-0"
+          >
+            <span className="w-6 h-6 rounded-md bg-primary flex items-center justify-center text-primary-foreground font-mono font-bold text-xs shadow-xs shrink-0">
               S
             </span>
-            <span>Stacks Hub</span>
+            <span className="whitespace-nowrap">Stacks Hub</span>
           </a>
 
-          <nav className="flex items-center gap-1">
+          {/* Desktop Navigation Links */}
+          <nav className="hidden sm:flex items-center gap-1">
             {NAV_ITEMS.map((item) => {
               const Icon = item.icon;
               const isActive =
@@ -56,10 +60,10 @@ function Header({
           </nav>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           {/* Live Telemetry Status Pill */}
           <div
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono border transition-colors ${
+            className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-full text-[11px] font-mono border transition-colors ${
               connectionStatus === "connected"
                 ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                 : connectionStatus === "connecting"
@@ -87,10 +91,37 @@ function Header({
   );
 }
 
+function MobileBottomNav({ currentPath }: { currentPath: string }) {
+  return (
+    <nav className="sm:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-background/95 backdrop-blur-md px-3 py-2 flex items-center justify-around shadow-lg">
+      {NAV_ITEMS.map((item) => {
+        const Icon = item.icon;
+        const isActive =
+          currentPath === item.href ||
+          (item.href !== "/" && currentPath.startsWith(item.href));
+        return (
+          <a
+            key={item.href}
+            href={item.href}
+            className={`flex flex-col items-center gap-1 py-1 px-4 rounded-lg text-[11px] font-medium transition-colors ${
+              isActive
+                ? "text-primary font-bold bg-primary/10"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Icon className={`w-4 h-4 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+            <span>{item.label}</span>
+          </a>
+        );
+      })}
+    </nav>
+  );
+}
+
 function Footer() {
   return (
-    <footer className="border-t border-border bg-card/50 py-6 mt-12 text-xs text-muted-foreground">
-      <div className="container mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+    <footer className="border-t border-border bg-card/50 py-6 mt-8 sm:mt-12 text-xs text-muted-foreground mb-16 sm:mb-0">
+      <div className="w-full max-w-[1760px] mx-auto px-3 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
         <div>
           80% vibe-coded, 20% hand-crafted, 100% with ❤️ by{" "}
           <a
@@ -103,7 +134,7 @@ function Footer() {
           </a>
           .
         </div>
-        <div className="flex items-center gap-4 text-muted-foreground">
+        <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4 text-muted-foreground">
           <a
             href="https://stacks.co"
             target="_blank"
@@ -145,9 +176,9 @@ export function App() {
 
   return (
     <ThemeProvider defaultTheme="system">
-      <div className="min-h-screen flex flex-col bg-background text-foreground antialiased selection:bg-primary/20 selection:text-primary">
+      <div className="min-h-screen flex flex-col bg-background text-foreground antialiased selection:bg-primary/20 selection:text-primary overflow-x-hidden">
         <Header currentPath={path} connectionStatus={status} />
-        <main className="flex-1 container mx-auto px-4 py-6">
+        <main className="flex-1 w-full max-w-[1760px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
           {isUtilitiesPage ? (
             <UtilitiesPage />
           ) : isBlocksPage ? (
@@ -157,6 +188,7 @@ export function App() {
           )}
         </main>
         <Footer />
+        <MobileBottomNav currentPath={path} />
       </div>
     </ThemeProvider>
   );
