@@ -123,7 +123,7 @@ function Footer() {
     <footer className="border-t border-border bg-card/50 py-6 mt-8 sm:mt-12 text-xs text-muted-foreground mb-16 sm:mb-0">
       <div className="w-full max-w-[1760px] mx-auto px-3 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
         <div>
-          80% vibe-coded, 20% hand-crafted, 100% with ❤️ by{" "}
+          100% vibe-coded with ❤️ by{" "}
           <a
             href="https://diwaker.io"
             target="_blank"

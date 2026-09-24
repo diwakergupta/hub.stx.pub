@@ -458,11 +458,12 @@ export function generateDot(
         let penwidth = 1.5;
 
         // Fork detection logic
-        // If parent is not in the immediately preceding block (implied by comparing heights?)
-        // Let's check block height diff.
-        if (commit.burnBlockHeight > parentCommit.burnBlockHeight + 1) {
-          // If parent is not in the block immediately preceding this commit's block?
-          // Let's stick to the 'fork' styling if it's not a direct parent in height.
+        // If parent is not in the immediately preceding block or builds on a non-canonical/losing parent
+        if (
+          commit.burnBlockHeight > parentCommit.burnBlockHeight + 1 ||
+          !parentCommit.canonical ||
+          !parentCommit.won
+        ) {
           color = "#E53E3E"; // Red
           penwidth = 2.5;
         }
@@ -536,7 +537,11 @@ export function generateGraph(
       const parentCommit = blockCommits.allCommits.get(commit.parent);
       if (parentCommit) {
         const isCanonical = Boolean(commit.canonical);
-        const isFork = !isCanonical && !parentCommit.canonical;
+        const isFork =
+          !isCanonical &&
+          (commit.burnBlockHeight > parentCommit.burnBlockHeight + 1 ||
+            !parentCommit.canonical ||
+            !parentCommit.won);
         edges.push({
           sourceTxid: parentCommit.txid,
           targetTxid: commit.txid,

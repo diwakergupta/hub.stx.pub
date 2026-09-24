@@ -138,7 +138,19 @@ export function CommitDagView({
 
   // Render SVG lines strictly connecting bottom edge to top edge
   const renderedEdges = React.useMemo(() => {
-    return graph.edges.map((edge) => {
+    // Sort edges so normal background links are drawn first, fork attempts on top, and canonical spine on top of everything
+    const sortedEdges = [...graph.edges].sort((a, b) => {
+      const getScore = (e: (typeof graph.edges)[0]) => {
+        const isHovered = hoveredTxid === e.sourceTxid || hoveredTxid === e.targetTxid;
+        if (isHovered) return 4;
+        if (e.canonical) return 3;
+        if (e.isFork) return 2;
+        return 1;
+      };
+      return getScore(a) - getScore(b);
+    });
+
+    return sortedEdges.map((edge) => {
       const source = nodePositions.get(edge.sourceTxid);
       const target = nodePositions.get(edge.targetTxid);
       if (!source || !target) return null;
@@ -155,25 +167,25 @@ export function CommitDagView({
       const isHovered =
         hoveredTxid === edge.sourceTxid || hoveredTxid === edge.targetTxid;
 
-      let strokeColor = "hsl(var(--muted-foreground) / 0.25)";
+      let strokeColor = "hsl(var(--muted-foreground) / 0.3)";
       let strokeWidth = 1.2;
       let strokeDasharray: string | undefined = undefined;
 
       if (edge.canonical) {
         strokeColor = "#0284c7"; // Sky 600 / vibrant blue
-        strokeWidth = 2.2;
+        strokeWidth = 2.4;
       } else if (edge.isFork) {
         strokeColor = "#ef4444"; // Red 500
-        strokeWidth = 1.8;
-        strokeDasharray = "3 3";
+        strokeWidth = 2.0;
+        strokeDasharray = "4 3";
       }
 
       if (isHovered) {
-        strokeWidth = Math.max(strokeWidth + 1.2, 2.8);
+        strokeWidth = Math.max(strokeWidth + 1.2, 3.0);
         strokeColor = edge.canonical
           ? "#38bdf8"
           : edge.isFork
-            ? "#f87171"
+            ? "#dc2626"
             : "hsl(var(--foreground))";
       }
 
