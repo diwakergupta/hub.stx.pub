@@ -3,7 +3,9 @@ import { logger } from "./logger";
 
 let snapshotWorker: Worker | null = null;
 
-export function maybeStartSnapshotWorker(): Worker | null {
+export function maybeStartSnapshotWorker(
+  onEvent?: (event: any) => void,
+): Worker | null {
   if (snapshotWorker) {
     logger.info("snapshot.worker.already-running");
     return snapshotWorker;
@@ -25,6 +27,11 @@ export function maybeStartSnapshotWorker(): Worker | null {
     });
     worker.addEventListener("error", (event) => {
       logger.error({ err: event }, "snapshot.worker.error");
+    });
+    worker.addEventListener("message", (event) => {
+      if (onEvent) {
+        onEvent(event.data);
+      }
     });
     snapshotWorker = worker;
     return snapshotWorker;

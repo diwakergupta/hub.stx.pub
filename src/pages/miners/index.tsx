@@ -1,607 +1,429 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { instance } from "@viz-js/viz";
+import * as React from "react";
 import {
-  Box,
-  Button,
-  Container,
-  Flex,
-  Heading,
-  Input,
-  Link,
-  List,
-  Spinner,
-  Stack,
+  ChevronLeft,
+  ChevronRight,
+  RotateCw,
+  Search,
+  Copy,
+  Check,
+  ExternalLink,
+  Flame,
+  Award,
+  Layers,
+  ArrowUpDown,
+  Coins,
+} from "lucide-react";
+import type { MinerPowerSnapshot, MinerPowerItem } from "@/shared/miner-power";
+import type { MinerVizResponse } from "@/shared/miner-viz";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import {
   Table,
-  Text,
-} from "@chakra-ui/react";
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { CommitDagView } from "@/components/commit-dag-view";
 import {
-  FaChevronLeft,
-  FaChevronRight,
-  FaRedo,
-  FaSearch,
-} from "react-icons/fa";
-import createPanZoom, { type PanZoom } from "panzoom";
+  formatNumber,
+  formatPercent,
+  formatStx,
+  stringToColor,
+  truncateAddress,
+} from "@/lib/utils";
 
-import type { MinerPowerSnapshot } from "@/shared/miner-power";
-
-interface MinerVizResponse {
-  bitcoinBlockHeight: number;
-  generatedAt: string;
-  dotSource: string;
-  sortitionId: string | null;
-  description: string;
+interface MinersPageProps {
+  realtimeEventCounter?: number;
 }
 
-type VizState =
-  | { status: "idle" | "loading" }
-  | { status: "error"; message: string }
-  | { status: "ready"; payload: MinerVizResponse; svg: string };
+export function MinersPage({ realtimeEventCounter = 0 }: MinersPageProps) {
+  const [requestedHeight, setRequestedHeight] = React.useState<number | undefined>(undefined);
+  const [vizData, setVizData] = React.useState<MinerVizResponse | null>(null);
+  const [powerData, setPowerData] = React.useState<MinerPowerSnapshot | null>(null);
+  const [loading, setLoading] = React.useState<boolean>(true);
+  const [error, setError] = React.useState<string | null>(null);
 
-type MinerPowerState =
-  | { status: "idle" | "loading" }
-  | { status: "error"; message: string }
-  | { status: "ready"; payload: MinerPowerSnapshot };
+  // Table filtering and sorting state
+  const [searchQuery, setSearchQuery] = React.useState<string>("");
+  const [sortField, setSortField] = React.useState<keyof MinerPowerItem>("blocksWon");
+  const [sortDirection, setSortDirection] = React.useState<"asc" | "desc">("desc");
+  const [copiedAddress, setCopiedAddress] = React.useState<string | null>(null);
 
-// Initialize Viz instance promise once
-const vizPromise = instance();
+  const loadData = React.useCallback(async (height?: number) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const vizUrl = height ? `/api/miners/viz?height=${height}` : "/api/miners/viz";
+      const powerUrl = height ? `/api/miners/power?height=${height}` : "/api/miners/power";
 
-function useMinerViz(height?: number): VizState {
-  const [state, setState] = useState<VizState>({ status: "idle" });
+      const [vizRes, powerRes] = await Promise.all([
+        fetch(vizUrl),
+        fetch(powerUrl),
+      ]);
 
-  useEffect(() => {
-    let disposed = false;
-    const controller = new AbortController();
-
-    async function load() {
-      setState({ status: "loading" });
-      try {
-        const url = height
-          ? `/api/miners/viz?height=${height}`
-          : "/api/miners/viz";
-        const response = await fetch(url, {
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error(`Request failed with status ${response.status}`);
-        }
-
-        const payload = (await response.json()) as MinerVizResponse;
-        const viz = await vizPromise;
-        const element = viz.renderSVGElement(payload.dotSource);
-        const svg = element.outerHTML;
-
-        if (!disposed) {
-          setState({ status: "ready", payload, svg });
-        }
-      } catch (error) {
-        if (disposed) return;
-        const message =
-          error instanceof Error ? error.message : "Unknown error loading data";
-        setState({ status: "error", message });
+      if (!vizRes.ok || !powerRes.ok) {
+        throw new Error("Failed to load snapshot telemetry");
       }
+
+      const viz = (await vizRes.json()) as MinerVizResponse;
+      const power = (await powerRes.json()) as MinerPowerSnapshot;
+
+      setVizData(viz);
+      setPowerData(power);
+    } catch (err: any) {
+      setError(err?.message || "Failed to load miner data");
+    } finally {
+      setLoading(false);
     }
+  }, []);
 
-    void load();
+  // Initial load and reload when requested height changes or real-time event counter increments
+  React.useEffect(() => {
+    loadData(requestedHeight);
+  }, [requestedHeight, realtimeEventCounter, loadData]);
 
-    return () => {
-      disposed = true;
-      controller.abort();
-    };
-  }, [height]);
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedAddress(text);
+    setTimeout(() => setCopiedAddress(null), 2000);
+  };
 
-  return state;
-}
-
-function useMinerPower(height?: number): MinerPowerState {
-  const [state, setState] = useState<MinerPowerState>({ status: "idle" });
-
-  useEffect(() => {
-    let disposed = false;
-    const controller = new AbortController();
-
-    async function load() {
-      setState({ status: "loading" });
-      try {
-        const url = height
-          ? `/api/miners/power?height=${height}`
-          : "/api/miners/power";
-        const response = await fetch(url, {
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          throw new Error(`Request failed with status ${response.status}`);
-        }
-
-        const payload = (await response.json()) as MinerPowerSnapshot;
-
-        if (!disposed) {
-          setState({ status: "ready", payload });
-        }
-      } catch (error) {
-        if (disposed) return;
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Unknown error loading miner power data";
-        setState({ status: "error", message });
-      }
-    }
-
-    void load();
-
-    return () => {
-      disposed = true;
-      controller.abort();
-    };
-  }, [height]);
-
-  return state;
-}
-
-function DiagramView({ state }: { state: VizState }) {
-  const ENABLE_PAN_ZOOM = false; // flip to true when you want it back
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const panzoomRef = useRef<PanZoom | null>(null);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    if (state.status !== "ready") {
-      container.innerHTML = "";
-      panzoomRef.current?.dispose();
-      panzoomRef.current = null;
-      container.style.overflow = "";
-      return;
-    }
-
-    container.innerHTML = state.svg;
-    const svg = container.querySelector("svg");
-    if (!svg) {
-      return;
-    }
-
-    const svgElement = svg as SVGSVGElement;
-    svgElement.style.display = "block";
-    svgElement.style.maxWidth = "100%";
-    svgElement.style.height = "auto";
-    svgElement.setAttribute("role", svgElement.getAttribute("role") ?? "img");
-
-    if (!ENABLE_PAN_ZOOM) {
-      container.style.overflow = "auto";
-      return () => {
-        container.innerHTML = "";
-        container.style.overflow = "";
-      };
-    }
-
-    container.style.overflow = "hidden";
-    panzoomRef.current?.dispose();
-    panzoomRef.current = createPanZoom(svgElement, {
-      maxZoom: 10,
-      minZoom: 1,
-      zoomSpeed: 1,
-      initialZoom: 1,
-    });
-
-    return () => {
-      panzoomRef.current?.dispose();
-      panzoomRef.current = null;
-      container.innerHTML = "";
-      container.style.overflow = "";
-    };
-  }, [state]);
-
-  if (state.status === "loading" || state.status === "idle") {
-    return (
-      <Flex
-        align="center"
-        justify="center"
-        minH="280px"
-        borderWidth="1px"
-        borderRadius="lg"
-        borderColor="gray.200"
-      >
-        <Stack align="center">
-          <Spinner size="lg" />
-          <Text fontSize="sm" color="gray.500">
-            Rendering diagram…
-          </Text>
-        </Stack>
-      </Flex>
-    );
-  }
-
-  if (state.status === "error") {
-    return (
-      <Flex
-        direction="column"
-        gap={4}
-        borderWidth="1px"
-        borderRadius="lg"
-        borderColor="gray.200"
-        p={6}
-      >
-        <Heading as="h3" size="md">
-          Something went wrong
-        </Heading>
-        <Text color="red.400">{state.message}</Text>
-        <Text color="gray.500" fontSize="sm">
-          Retry the page or check the server logs for details.
-        </Text>
-      </Flex>
-    );
-  }
-
-  return (
-    <Stack
-      borderWidth="1px"
-      borderRadius="lg"
-      borderColor="gray.200"
-      width="100%"
-      p={{ base: 4, md: 6, lg: 8 }}
-      gap={{ base: 4, md: 6 }}
-    >
-      <Stack>
-        <Heading as="h2" size="lg">
-          Visualizing Block Commits
-        </Heading>
-        <Text fontSize="sm" color="gray.500">
-          Bitcoin block height{" "}
-          {state.payload.bitcoinBlockHeight.toLocaleString()} · Updated{" "}
-          {new Date(state.payload.generatedAt).toLocaleString()}
-        </Text>
-        <Text>
-          This is a visualization of the Stacks chain, from the perspective of
-          the block commits broadcast by Stacks miners on Bitcoin.
-        </Text>
-        <List.Root fontSize="sm">
-          <List.Item>
-            Each "row" or "cluster" represents commits at a given Bitcoin block.
-            The label links to the corresponding block on mempool.space
-          </List.Item>
-          <List.Item>
-            Each block commit node links to the corresponding Bitcoin
-            transaction.
-          </List.Item>
-          <List.Item>
-            Winning commits are solid, the rest are dashed. For winning commits,
-            the node links to the corresponding Stacks block instead.
-          </List.Item>
-          <List.Item>
-            Red edges indicate blocks building on top of non-canonical tips
-            (indicating forks)
-          </List.Item>
-          <List.Item>
-            Block commits from the same miner have the same fill color. The
-            algorithm is rudimentary: I cast the first 8 bytes of the address to
-            an int, and then modulo that into a fixed set of colors.
-          </List.Item>
-        </List.Root>
-      </Stack>
-
-      <Box
-        borderWidth="1px"
-        borderRadius="md"
-        overflow={ENABLE_PAN_ZOOM ? "hidden" : "auto"}
-        borderColor="gray.100"
-        ref={containerRef}
-        minH={{ base: "65vh", md: "78vh", lg: "82vh" }}
-        maxH={ENABLE_PAN_ZOOM ? "95vh" : undefined}
-        width="100%"
-      />
-      {ENABLE_PAN_ZOOM ? (
-        <Text fontSize="xs" color="gray.500">
-          Scroll to zoom, drag to pan. Double-click anywhere to reset the view.
-        </Text>
-      ) : null}
-    </Stack>
-  );
-}
-
-function MinerPowerView({ state }: { state: MinerPowerState }) {
-  if (state.status === "idle" || state.status === "loading") {
-    return (
-      <Flex
-        align="center"
-        justify="center"
-        minH="200px"
-        borderWidth="1px"
-        borderRadius="lg"
-        borderColor="gray.200"
-        bg="bg.muted"
-      >
-        <Stack align="center">
-          <Spinner size="lg" />
-          <Text fontSize="sm" color="gray.500">
-            Loading miner power distribution…
-          </Text>
-        </Stack>
-      </Flex>
-    );
-  }
-
-  if (state.status === "error") {
-    return (
-      <Stack
-        borderWidth="1px"
-        borderRadius="lg"
-        borderColor="gray.200"
-        bg="white"
-        p={6}
-      >
-        <Heading as="h3" size="md">
-          Unable to load miner power
-        </Heading>
-        <Text color="red.400">{state.message}</Text>
-        <Text fontSize="sm" color="gray.500">
-          Check the Bun server logs or verify database connectivity.
-        </Text>
-      </Stack>
-    );
-  }
-
-  // This check is redundant, but it helps TypeScript narrow down the type of `state`
-  if (state.status !== "ready") return null;
-
-  const numberFmt = new Intl.NumberFormat("en-US");
-  const percentFmt = new Intl.NumberFormat("en-US", {
-    style: "percent",
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  });
-  const stxFmt = new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  });
-
-  const { payload } = state;
-  const bitcoinBlocksObserved =
-    payload.bitcoinBlocksObserved ?? payload.windowSize;
-  const noSortitionBlocks = payload.noSortitionBlocks ?? 0;
-  const noSortitionRate = payload.noSortitionRate ?? 0;
-  const isWeeklySnapshot = payload.formatVersion === 2;
-
-  return (
-    <Stack borderWidth="1px" borderRadius="lg" borderColor="gray.200" p={4}>
-      <Stack
-        direction={{ base: "column", md: "row" }}
-        justify="space-between"
-        align={{ base: "flex-start", md: "center" }}
-      >
-        <Stack>
-          <Heading as="h3" size="md">
-            {isWeeklySnapshot
-              ? "Miner Power · Last ~1 Week"
-              : `Miner Power · Last ${payload.windowSize} Sortitions`}
-          </Heading>
-          <Text fontSize="sm" color="gray.500">
-            Last Updated {new Date(payload.generatedAt).toLocaleString()}
-          </Text>
-        </Stack>
-        <Stack
-          fontSize="sm"
-          color="gray.500"
-          align={{ base: "flex-start", md: "flex-end" }}
-        >
-          <Text>
-            Bitcoin block {payload.bitcoinBlockHeight.toLocaleString()}
-          </Text>
-          {payload.sortitionId && <Text>Sortition {payload.sortitionId}</Text>}
-        </Stack>
-      </Stack>
-
-      <Table.ScrollArea
-        borderWidth="1px"
-        borderRadius="md"
-        borderColor="gray.100"
-      >
-        <Table.Root size="md" striped colorPalette="teal">
-          <Table.Header>
-            <Table.Row>
-              <Table.ColumnHeader>Miner</Table.ColumnHeader>
-              <Table.ColumnHeader textAlign="end">
-                Blocks Won
-              </Table.ColumnHeader>
-              <Table.ColumnHeader textAlign="end">
-                BTC Spent (sats)
-              </Table.ColumnHeader>
-              <Table.ColumnHeader textAlign="end">
-                STX Earned
-              </Table.ColumnHeader>
-              <Table.ColumnHeader textAlign="end">Win Rate</Table.ColumnHeader>
-            </Table.Row>
-          </Table.Header>
-          <Table.Body>
-            {payload.items.map((miner) => {
-              const explorerUrl = `https://explorer.stacks.co/address/${miner.stacksRecipient}`;
-              const btcUrl = miner.bitcoinAddress
-                ? `https://mempool.space/address/${miner.bitcoinAddress}`
-                : null;
-              return (
-                <Table.Row key={miner.stacksRecipient}>
-                  <Table.Cell>
-                    <Stack gap={1}>
-                      <Link
-                        href={explorerUrl}
-                        target="_blank"
-                        fontWeight="medium"
-                      >
-                        {miner.stacksRecipient}
-                      </Link>
-                      {btcUrl && (
-                        <Link href={btcUrl} target="_blank" fontSize="xs">
-                          {miner.bitcoinAddress}
-                        </Link>
-                      )}
-                    </Stack>
-                  </Table.Cell>
-                  <Table.Cell textAlign="end">
-                    {numberFmt.format(miner.blocksWon)}
-                  </Table.Cell>
-                  <Table.Cell textAlign="end">
-                    {numberFmt.format(miner.btcSpent)}
-                  </Table.Cell>
-                  <Table.Cell textAlign="end">
-                    {stxFmt.format(miner.stxEarnt)}
-                  </Table.Cell>
-                  <Table.Cell textAlign="end">
-                    {percentFmt.format(miner.winRate / 100)}
-                  </Table.Cell>
-                </Table.Row>
-              );
-            })}
-          </Table.Body>
-        </Table.Root>
-      </Table.ScrollArea>
-
-      <Stack
-        direction={{ base: "column", md: "row" }}
-        justify="space-between"
-        fontSize="sm"
-        color="gray.600"
-        borderTopWidth="1px"
-        borderColor="gray.100"
-        pt={3}
-      >
-        <Text>
-          {numberFmt.format(payload.windowSize)} sortitions across{" "}
-          {numberFmt.format(bitcoinBlocksObserved)} canonical Bitcoin
-          blocks
-        </Text>
-        <Text>
-          {numberFmt.format(noSortitionBlocks)} without a sortition (
-          {percentFmt.format(noSortitionRate / 100)})
-        </Text>
-      </Stack>
-    </Stack>
-  );
-}
-
-function SnapshotControls({
-  currentHeight,
-  onHeightChange,
-}: {
-  currentHeight?: number;
-  onHeightChange: (h: number | undefined) => void;
-}) {
-  const [inputVal, setInputVal] = useState("");
-
-  useEffect(() => {
-    if (currentHeight) {
-      setInputVal(currentHeight.toString());
-    }
-  }, [currentHeight]);
-
-  const handleSubmit = () => {
-    const h = parseInt(inputVal, 10);
-    if (!isNaN(h) && h > 0) {
-      onHeightChange(h);
+  const handleSort = (field: keyof MinerPowerItem) => {
+    if (sortField === field) {
+      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection("desc");
     }
   };
 
-  return (
-    <Flex
-      gap={4}
-      align="center"
-      bg="gray.50"
-      p={3}
-      borderRadius="md"
-      borderWidth="1px"
-      borderColor="gray.200"
-      wrap="wrap"
-    >
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={!currentHeight}
-        onClick={() => currentHeight && onHeightChange(currentHeight - 1)}
-      >
-        <FaChevronLeft /> Prev
-      </Button>
+  // Filter and sort miner table items
+  const filteredMiners = React.useMemo(() => {
+    if (!powerData?.items) return [];
+    let items = [...powerData.items];
 
-      <Flex gap={2} align="center">
-        <Text fontSize="sm" fontWeight="medium">
-          Block Height:
-        </Text>
-        <Input
-          size="sm"
-          width="120px"
-          value={inputVal}
-          onChange={(e) => setInputVal(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") handleSubmit();
-          }}
-          placeholder="Height"
-          bg="white"
-        />
-        <Button size="sm" onClick={handleSubmit}>
-          Go
-        </Button>
-      </Flex>
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      items = items.filter(
+        (m) =>
+          m.stacksRecipient.toLowerCase().includes(q) ||
+          (m.bitcoinAddress && m.bitcoinAddress.toLowerCase().includes(q)),
+      );
+    }
 
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={!currentHeight}
-        onClick={() => currentHeight && onHeightChange(currentHeight + 1)}
-      >
-        Next <FaChevronRight />
-      </Button>
+    items.sort((a, b) => {
+      const valA = a[sortField] ?? 0;
+      const valB = b[sortField] ?? 0;
+      if (typeof valA === "number" && typeof valB === "number") {
+        return sortDirection === "asc" ? valA - valB : valB - valA;
+      }
+      return 0;
+    });
 
-      <Box flex="1" />
+    return items;
+  }, [powerData, searchQuery, sortField, sortDirection]);
 
-      <Button
-        variant="ghost"
-        size="sm"
-        colorPalette="blue"
-        onClick={() => {
-          onHeightChange(undefined);
-          setInputVal("");
-        }}
-      >
-        <FaRedo /> Latest
-      </Button>
-    </Flex>
-  );
-}
+  // Derived current height
+  const currentHeight = vizData?.bitcoinBlockHeight ?? requestedHeight;
 
-export function MinersPage() {
-  const [requestedHeight, setRequestedHeight] = useState<number | undefined>(
-    undefined,
-  );
-  const vizState = useMinerViz(requestedHeight);
-  const minerPowerState = useMinerPower(requestedHeight);
+  // Aggregate high-level stats
+  const totalSpendSats = React.useMemo(() => {
+    if (!powerData?.items) return 0;
+    return powerData.items.reduce((acc, m) => acc + (m.btcSpent || 0), 0);
+  }, [powerData]);
 
-  // Derive current height from loaded data if available, otherwise fallback to requested
-  const currentHeight =
-    vizState.status === "ready"
-      ? vizState.payload.bitcoinBlockHeight
-      : requestedHeight;
+  const totalStxEarned = React.useMemo(() => {
+    if (!powerData?.items) return 0;
+    return powerData.items.reduce((acc, m) => acc + (m.stxEarnt || 0), 0);
+  }, [powerData]);
 
   return (
-    <Container
-      maxW={{ base: "100%", md: "8xl" }}
-      py={{ base: 4, md: 6 }}
-      px={{ base: 4, md: 6 }}
-    >
-      <Stack gap={4}>
-        <Flex justify="space-between" align="center" wrap="wrap" gap={4}>
-          <Heading size="2xl">Stacks Miners</Heading>
-        </Flex>
+    <div className="space-y-6">
+      {/* Page Title & Navigation Controls */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Stacks Miners</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Real-time telemetry, block commits, and power distribution across canonical Bitcoin sortitions.
+          </p>
+        </div>
 
-        <SnapshotControls
-          currentHeight={currentHeight}
-          onHeightChange={setRequestedHeight}
+        {/* Snapshot height navigator */}
+        <div className="flex items-center gap-2 bg-card border border-border rounded-lg p-1 shadow-xs">
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={!currentHeight}
+            onClick={() => currentHeight && setRequestedHeight(currentHeight - 1)}
+            className="h-8 gap-1 px-2.5 text-xs"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" /> Prev
+          </Button>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const val = (e.currentTarget.elements.namedItem("height") as HTMLInputElement).value;
+              const h = parseInt(val, 10);
+              if (!isNaN(h) && h > 0) setRequestedHeight(h);
+            }}
+            className="flex items-center gap-1"
+          >
+            <Input
+              name="height"
+              key={currentHeight}
+              defaultValue={currentHeight?.toString() || ""}
+              placeholder="Block #"
+              className="h-8 w-24 text-xs font-mono text-center"
+            />
+            <Button variant="outline" size="sm" type="submit" className="h-8 px-2 text-xs">
+              Go
+            </Button>
+          </form>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={!currentHeight}
+            onClick={() => currentHeight && setRequestedHeight(currentHeight + 1)}
+            className="h-8 gap-1 px-2.5 text-xs"
+          >
+            Next <ChevronRight className="w-3.5 h-3.5" />
+          </Button>
+
+          <div className="w-px h-4 bg-border mx-1" />
+
+          <Button
+            variant={requestedHeight ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setRequestedHeight(undefined)}
+            className="h-8 gap-1.5 px-2.5 text-xs text-primary font-medium"
+          >
+            <RotateCw className="w-3 h-3" /> Latest
+          </Button>
+        </div>
+      </div>
+
+      {/* Top Telemetry KPI Cards */}
+      {powerData && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <span className="text-xs text-muted-foreground font-medium block">
+                  Bitcoin Block Height
+                </span>
+                <span className="text-2xl font-bold font-mono tracking-tight text-foreground">
+                  {powerData.bitcoinBlockHeight.toLocaleString()}
+                </span>
+              </div>
+              <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                <Layers className="w-5 h-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <span className="text-xs text-muted-foreground font-medium block">
+                  Active Miners (1 Week)
+                </span>
+                <span className="text-2xl font-bold font-mono tracking-tight text-foreground">
+                  {powerData.items.length}
+                </span>
+              </div>
+              <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500">
+                <Award className="w-5 h-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <span className="text-xs text-muted-foreground font-medium block">
+                  Total BTC Spent
+                </span>
+                <span className="text-2xl font-bold font-mono tracking-tight text-foreground">
+                  {formatNumber(Math.round(totalSpendSats / 100_000_000 * 100) / 100)}{" "}
+                  <span className="text-xs font-normal text-muted-foreground">BTC</span>
+                </span>
+              </div>
+              <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-500">
+                <Flame className="w-5 h-5" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <span className="text-xs text-muted-foreground font-medium block">
+                  Total STX Distributed
+                </span>
+                <span className="text-2xl font-bold font-mono tracking-tight text-foreground">
+                  {formatNumber(Math.round(totalStxEarned))}{" "}
+                  <span className="text-xs font-normal text-muted-foreground">STX</span>
+                </span>
+              </div>
+              <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+                <Coins className="w-5 h-5" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Modern Commit DAG Visualizer */}
+      {vizData?.graph && (
+        <CommitDagView
+          graph={vizData.graph}
+          bitcoinBlockHeight={vizData.bitcoinBlockHeight}
+          generatedAt={vizData.generatedAt}
         />
+      )}
 
-        <MinerPowerView state={minerPowerState} />
-        <DiagramView state={vizState} />
-      </Stack>
-    </Container>
+      {/* Miner Power Distribution Table */}
+      {powerData && (
+        <Card className="overflow-hidden">
+          <div className="p-4 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold tracking-tight">Miner Power Distribution</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Observed over {formatNumber(powerData.bitcoinBlocksObserved ?? powerData.windowSize)} canonical Bitcoin blocks (
+                {formatNumber(powerData.noSortitionBlocks ?? 0)} blocks without sortition,{" "}
+                {formatPercent((powerData.noSortitionRate ?? 0) / 100)})
+              </p>
+            </div>
+
+            {/* Miner Search */}
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Filter by address…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8 h-8 text-xs font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[300px]">Miner</TableHead>
+                  <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort("blocksWon")}>
+                    <div className="flex items-center justify-end gap-1">
+                      Blocks Won
+                      <ArrowUpDown className="w-3 h-3 text-muted-foreground" />
+                    </div>
+                  </TableHead>
+                  <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort("winRate")}>
+                    <div className="flex items-center justify-end gap-1">
+                      Win Rate
+                      <ArrowUpDown className="w-3 h-3 text-muted-foreground" />
+                    </div>
+                  </TableHead>
+                  <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort("btcSpent")}>
+                    <div className="flex items-center justify-end gap-1">
+                      BTC Spent (sats)
+                      <ArrowUpDown className="w-3 h-3 text-muted-foreground" />
+                    </div>
+                  </TableHead>
+                  <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort("stxEarnt")}>
+                    <div className="flex items-center justify-end gap-1">
+                      STX Earned
+                      <ArrowUpDown className="w-3 h-3 text-muted-foreground" />
+                    </div>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredMiners.map((miner) => {
+                  const minerColor = stringToColor(miner.stacksRecipient);
+                  const explorerUrl = `https://explorer.stacks.co/address/${miner.stacksRecipient}`;
+                  const btcUrl = miner.bitcoinAddress
+                    ? `https://mempool.space/address/${miner.bitcoinAddress}`
+                    : null;
+
+                  return (
+                    <TableRow key={miner.stacksRecipient}>
+                      <TableCell>
+                        <div className="flex items-center gap-2.5">
+                          <span
+                            className="w-3 h-3 rounded-full shrink-0 ring-1 ring-border"
+                            style={{ backgroundColor: minerColor }}
+                          />
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1.5 font-mono font-medium text-xs">
+                              <a
+                                href={explorerUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="hover:text-primary transition-colors hover:underline"
+                              >
+                                {truncateAddress(miner.stacksRecipient, 8, 6)}
+                              </a>
+                              <button
+                                onClick={() => copyToClipboard(miner.stacksRecipient)}
+                                className="text-muted-foreground hover:text-foreground"
+                                title="Copy Stacks address"
+                              >
+                                {copiedAddress === miner.stacksRecipient ? (
+                                  <Check className="w-3 h-3 text-emerald-500" />
+                                ) : (
+                                  <Copy className="w-3 h-3" />
+                                )}
+                              </button>
+                            </div>
+
+                            {miner.bitcoinAddress && (
+                              <div className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground">
+                                <a
+                                  href={btcUrl!}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="hover:text-primary transition-colors"
+                                >
+                                  ₿ {truncateAddress(miner.bitcoinAddress, 6, 4)}
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </TableCell>
+
+                      <TableCell className="text-right font-mono font-semibold text-foreground">
+                        {formatNumber(miner.blocksWon)}
+                      </TableCell>
+
+                      <TableCell className="text-right font-mono">
+                        <span className="inline-block px-1.5 py-0.5 rounded bg-muted/60 text-xs font-semibold">
+                          {formatPercent(miner.winRate / 100)}
+                        </span>
+                      </TableCell>
+
+                      <TableCell className="text-right font-mono text-muted-foreground">
+                        {formatNumber(miner.btcSpent)}
+                      </TableCell>
+
+                      <TableCell className="text-right font-mono font-medium text-emerald-600 dark:text-emerald-400">
+                        {formatStx(miner.stxEarnt)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </Card>
+      )}
+    </div>
   );
 }
-
-export default MinersPage;

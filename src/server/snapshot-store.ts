@@ -2,8 +2,9 @@ import { Database } from "bun:sqlite";
 import { join } from "path";
 
 import type { MinerPowerSnapshot } from "@/shared/miner-power";
-import type { MinerVizSnapshot } from "./miner-viz";
-import { HUB_DB_RELATIVE } from "./paths";
+import type { MinerVizGraph } from "@/shared/miner-viz";
+import { parseDotToGraph, type MinerVizSnapshot } from "./miner-viz";
+import { getHubDbPath } from "./paths";
 
 const SNAPSHOT_SCHEMA = `CREATE TABLE IF NOT EXISTS miner_snapshots (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -11,7 +12,8 @@ const SNAPSHOT_SCHEMA = `CREATE TABLE IF NOT EXISTS miner_snapshots (
   bitcoin_block_height INTEGER NOT NULL,
   sortition_id TEXT,
   miner_power_json TEXT NOT NULL,
-  dot_source TEXT NOT NULL
+  dot_source TEXT NOT NULL,
+  graph_json TEXT
 )`;
 
 interface SnapshotRow {
@@ -20,6 +22,7 @@ interface SnapshotRow {
   sortition_id: string | null;
   miner_power_json: string;
   dot_source: string;
+  graph_json?: string | null;
 }
 
 export interface MinerSnapshotRecord {
@@ -31,7 +34,7 @@ export interface MinerSnapshotRecord {
 }
 
 function openHubDatabase(dataDir: string, mode: "read" | "write"): Database {
-  const path = join(dataDir, HUB_DB_RELATIVE);
+  const path = getHubDbPath(dataDir);
   if (mode === "read") {
     const db = new Database(path, {
       readonly: true,
@@ -47,6 +50,11 @@ function openHubDatabase(dataDir: string, mode: "read" | "write"): Database {
   });
   db.run("PRAGMA journal_mode=WAL");
   db.run(SNAPSHOT_SCHEMA);
+  try {
+    db.run("ALTER TABLE miner_snapshots ADD COLUMN graph_json TEXT");
+  } catch {
+    // Ignore if column already exists
+  }
   return db;
 }
 
@@ -62,14 +70,18 @@ export function insertSnapshot(
 ) {
   const db = openHubDatabase(dataDir, "write");
   try {
+    const graphJson = record.minerViz.graph
+      ? JSON.stringify(record.minerViz.graph)
+      : null;
     const stmt = db.prepare(
       `INSERT INTO miner_snapshots (
           generated_at,
           bitcoin_block_height,
           sortition_id,
           miner_power_json,
-          dot_source
-        ) VALUES (?, ?, ?, ?, ?)`,
+          dot_source,
+          graph_json
+        ) VALUES (?, ?, ?, ?, ?, ?)`,
     );
     stmt.run(
       record.generatedAt,
@@ -77,6 +89,7 @@ export function insertSnapshot(
       record.sortitionId,
       JSON.stringify(record.minerPower),
       record.minerViz.dotSource,
+      graphJson,
     );
   } finally {
     db.close();
@@ -101,11 +114,24 @@ export function pruneSnapshots(
 
 function parseSnapshotRow(row: SnapshotRow): MinerSnapshotRecord {
   const minerPower = JSON.parse(row.miner_power_json) as MinerPowerSnapshot;
+
+  let graph: MinerVizGraph;
+  if (row.graph_json) {
+    try {
+      graph = JSON.parse(row.graph_json);
+    } catch {
+      graph = parseDotToGraph(row.dot_source);
+    }
+  } else {
+    graph = parseDotToGraph(row.dot_source);
+  }
+
   const minerViz: MinerVizSnapshot = {
     generatedAt: row.generated_at,
     bitcoinBlockHeight: row.bitcoin_block_height,
     sortitionId: row.sortition_id,
     dotSource: row.dot_source,
+    graph,
   };
 
   return {
@@ -117,15 +143,31 @@ function parseSnapshotRow(row: SnapshotRow): MinerSnapshotRecord {
   };
 }
 
+function getSelectColumns(db: Database): string {
+  try {
+    const col = db
+      .prepare<{ name: string }>(
+        "SELECT name FROM pragma_table_info('miner_snapshots') WHERE name = 'graph_json'",
+      )
+      .get();
+    if (col) {
+      return "generated_at, bitcoin_block_height, sortition_id, miner_power_json, dot_source, graph_json";
+    }
+  } catch {}
+  return "generated_at, bitcoin_block_height, sortition_id, miner_power_json, dot_source, NULL AS graph_json";
+}
+
 function fetchSnapshot(
   dataDir: string,
-  query: string,
+  queryBuilder: (columns: string) => string,
   params: any[] = [],
 ): MinerSnapshotRecord | null {
   const db = openHubDatabase(dataDir, "read");
   try {
     let row: SnapshotRow | null;
     try {
+      const columns = getSelectColumns(db);
+      const query = queryBuilder(columns);
       row = db.prepare<SnapshotRow, any[]>(query).get(...params);
     } catch (error) {
       if (error instanceof Error && /no such table/i.test(error.message)) {
@@ -149,15 +191,11 @@ export function loadLatestSnapshot(
 ): MinerSnapshotRecord | null {
   return fetchSnapshot(
     dataDir,
-    `SELECT
-       generated_at,
-       bitcoin_block_height,
-       sortition_id,
-       miner_power_json,
-       dot_source
-     FROM miner_snapshots
-     ORDER BY rowid DESC
-     LIMIT 1`,
+    (cols) =>
+      `SELECT ${cols}
+       FROM miner_snapshots
+       ORDER BY rowid DESC
+       LIMIT 1`,
   );
 }
 
@@ -167,15 +205,11 @@ export function loadSnapshotByHeight(
 ): MinerSnapshotRecord | null {
   return fetchSnapshot(
     dataDir,
-    `SELECT
-       generated_at,
-       bitcoin_block_height,
-       sortition_id,
-       miner_power_json,
-       dot_source
-     FROM miner_snapshots
-     ORDER BY ABS(bitcoin_block_height - ?) ASC
-     LIMIT 1`,
+    (cols) =>
+      `SELECT ${cols}
+       FROM miner_snapshots
+       ORDER BY ABS(bitcoin_block_height - ?) ASC
+       LIMIT 1`,
     [targetHeight],
   );
 }

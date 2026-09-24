@@ -7,10 +7,22 @@ import { logger } from "./server/logger";
 import { withRequestLogging } from "./server/request-logger";
 import { maybeStartSnapshotWorker } from "./server/worker-manager";
 
-maybeStartSnapshotWorker();
-
+const port = parseInt(process.env.PORT || "4020", 10);
+const hostname = process.env.HOST || "0.0.0.0";
 const isProduction = process.env.NODE_ENV === "production";
+
+// In development, ensure CSS is up to date
+if (!isProduction) {
+  try {
+    Bun.spawnSync(["bunx", "tailwindcss", "-i", "./src/input.css", "-o", "./src/index.css"]);
+  } catch (err) {
+    logger.warn({ err }, "tailwindcss.dev-compile.warning");
+  }
+}
+
 const server = serve({
+  port,
+  hostname,
   routes: {
     "/": index,
     "/blocks": index,
@@ -35,6 +47,28 @@ const server = serve({
         return Response.json({ blocks });
       }),
     ),
+
+    "/api/ws": (req, srv) => {
+      if (srv.upgrade(req)) {
+        return; // successfully upgraded
+      }
+      return new Response("WebSocket upgrade failed", { status: 400 });
+    },
+  },
+
+  websocket: {
+    open(ws) {
+      ws.subscribe("telemetry");
+      logger.info("websocket.client.connected");
+    },
+    message(ws, msg) {
+      if (msg === "ping") {
+        ws.send(JSON.stringify({ type: "pong", time: Date.now() }));
+      }
+    },
+    close(ws) {
+      logger.info("websocket.client.disconnected");
+    },
   },
 
   development: !isProduction && {
@@ -43,4 +77,19 @@ const server = serve({
   },
 });
 
-logger.info({ url: server.url.toString() }, "server.start");
+maybeStartSnapshotWorker((event) => {
+  if (event && event.type) {
+    logger.info({ event }, "broadcasting.telemetry.event");
+    server.publish("telemetry", JSON.stringify(event));
+  }
+});
+
+logger.info(
+  {
+    url: server.url.toString(),
+    port,
+    hostname,
+    db: process.env.HUB_DB_FILENAME || "hub.sqlite",
+  },
+  "server.start",
+);

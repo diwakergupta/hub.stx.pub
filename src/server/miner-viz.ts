@@ -1,4 +1,10 @@
 import { Database, type Statement } from "bun:sqlite";
+import type {
+  MinerVizBlock,
+  MinerVizEdge,
+  MinerVizGraph,
+  MinerVizNode,
+} from "@/shared/miner-viz";
 import {
   latestWinningSortition,
   loadCanonicalSortitions,
@@ -9,6 +15,7 @@ export interface MinerVizSnapshot {
   bitcoinBlockHeight: number;
   sortitionId: string | null;
   dotSource: string;
+  graph?: MinerVizGraph;
 }
 
 export const MINER_VIZ_WINDOW = 20;
@@ -110,7 +117,7 @@ export function fetchCommitData(
       burnHeaderHash: row.burn_header_hash,
       txid: row.txid,
       vtxindex: row.vtxindex ?? 0,
-      sender: row.apparent_sender ?? "",
+      sender: (row.apparent_sender ?? "").replace(/['"]/g, ""),
       burnBlockHeight: row.block_height ?? 0,
       spend: Number(row.burn_fee) || 0,
       sortitionId: row.sortition_id ?? "",
@@ -476,6 +483,185 @@ export function generateDot(
   return lines.join("\n");
 }
 
+export function generateGraph(
+  lowerBound: number,
+  startBlock: number,
+  blockCommits: BlockCommits,
+): MinerVizGraph {
+  const blocks: MinerVizBlock[] = [];
+  const edges: MinerVizEdge[] = [];
+
+  for (let height = lowerBound; height <= startBlock; height += 1) {
+    const commits = blockCommits.commitsByBlock.get(height);
+    if (!commits || commits.length === 0) {
+      continue;
+    }
+
+    let sortitionSpend = 0;
+    const commitNodes: MinerVizNode[] = [];
+
+    for (const commit of commits) {
+      if (sortitionSpend === 0) {
+        sortitionSpend =
+          blockCommits.sortitionFeesMap.get(commit.sortitionId) ?? 0;
+      }
+
+      commitNodes.push({
+        txid: commit.txid,
+        sender: commit.sender,
+        burnBlockHeight: commit.burnBlockHeight,
+        spendSats: commit.spend,
+        sortitionId: commit.sortitionId,
+        memo: commit.memo,
+        parentTxid: commit.parent || null,
+        stacksHeight: commit.stacksHeight,
+        blockHash: commit.blockHash || null,
+        won: commit.won,
+        canonical: commit.canonical,
+        tip: commit.tip,
+        coinbaseEarned: commit.coinbaseEarned,
+        feesEarned: commit.feesEarned,
+      });
+    }
+
+    blocks.push({
+      height,
+      sortitionSpendSats: sortitionSpend,
+      commits: commitNodes,
+    });
+  }
+
+  for (const commit of blockCommits.allCommits.values()) {
+    if (commit.parent) {
+      const parentCommit = blockCommits.allCommits.get(commit.parent);
+      if (parentCommit) {
+        const isCanonical = Boolean(commit.canonical);
+        const isFork = !isCanonical && !parentCommit.canonical;
+        edges.push({
+          sourceTxid: parentCommit.txid,
+          targetTxid: commit.txid,
+          canonical: isCanonical,
+          isFork,
+        });
+      }
+    }
+  }
+
+  return { blocks, edges };
+}
+
+export function parseDotToGraph(dotSource: string): MinerVizGraph {
+  const blocks: MinerVizBlock[] = [];
+  const edges: MinerVizEdge[] = [];
+
+  // Match subgraphs: subgraph cluster_block_(\d+) { ... }
+  const clusterRegex =
+    /subgraph\s+cluster_block_(\d+)\s*\{([\s\S]*?)(?=\n\s*subgraph|\n\s*\}[\s\n]*$|\n\s*"[a-fA-F0-9]+"\s*->)/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = clusterRegex.exec(dotSource)) !== null) {
+    const height = parseInt(match[1], 10);
+    const body = match[2];
+
+    let sortitionSpendSats = 0;
+    const spendMatch = body.match(/💰\s*([\d,]+)K sats/);
+    if (spendMatch) {
+      sortitionSpendSats =
+        parseInt(spendMatch[1].replace(/,/g, ""), 10) * 1000;
+    }
+
+    const commits: MinerVizNode[] = [];
+    const nodeRegex =
+      /"([a-fA-F0-9]+)"\s*\[label="([^"]*)",\s*URL="([^"]*)",\s*fillcolor="([^"]*)",\s*color="([^"]*)",\s*style="([^"]*)",\s*penwidth=([\d\.]+)/g;
+    let nodeMatch: RegExpExecArray | null;
+
+    while ((nodeMatch = nodeRegex.exec(body)) !== null) {
+      const txid = nodeMatch[1];
+      const rawLabel = nodeMatch[2];
+      const url = nodeMatch[3];
+      const color = nodeMatch[5];
+      const style = nodeMatch[6];
+      const penwidth = parseFloat(nodeMatch[7]);
+
+      const senderMatch = rawLabel.match(/⛏️\s*([^\\]+)/);
+      const stacksHeightMatch = rawLabel.match(/🔗\s*(\d+)/);
+      const commitSpendMatch = rawLabel.match(/💸\s*([\d,]+)K sats/);
+      const memoMatch = rawLabel.match(/📋\s*([^\\]+)/);
+
+      const sender = senderMatch
+        ? senderMatch[1].trim().replace(/['"]/g, "")
+        : "unknown";
+      const stacksHeight = stacksHeightMatch
+        ? parseInt(stacksHeightMatch[1], 10)
+        : 0;
+      const spendSats = commitSpendMatch
+        ? parseInt(commitSpendMatch[1].replace(/,/g, ""), 10) * 1000
+        : 0;
+      const memo = memoMatch ? memoMatch[1].trim() : "";
+
+      const won = penwidth >= 3 || color === "#2B6CB0";
+      const tip = penwidth >= 4;
+      const canonical = !style.includes("dashed") || won;
+
+      let blockHash: string | null = null;
+      if (url.includes("/block/0x")) {
+        blockHash = url.split("/block/0x")[1];
+      }
+
+      commits.push({
+        txid,
+        sender,
+        burnBlockHeight: height,
+        spendSats,
+        sortitionId: "",
+        memo,
+        parentTxid: null,
+        stacksHeight,
+        blockHash,
+        won,
+        canonical,
+        tip,
+        coinbaseEarned: 0,
+        feesEarned: 0,
+      });
+    }
+
+    blocks.push({
+      height,
+      sortitionSpendSats,
+      commits,
+    });
+  }
+
+  // Parse edges: "parent" -> "child" [color="...", penwidth=...];
+  const edgeRegex =
+    /"([a-fA-F0-9]+)"\s*->\s*"([a-fA-F0-9]+)"\s*\[color="([^"]*)",\s*penwidth=([\d\.]+)/g;
+  let edgeMatch: RegExpExecArray | null;
+  while ((edgeMatch = edgeRegex.exec(dotSource)) !== null) {
+    const sourceTxid = edgeMatch[1];
+    const targetTxid = edgeMatch[2];
+    const color = edgeMatch[3];
+    const isFork = color === "#E53E3E";
+    const canonical = color === "#3182CE";
+
+    edges.push({
+      sourceTxid,
+      targetTxid,
+      canonical,
+      isFork,
+    });
+
+    for (const b of blocks) {
+      const commit = b.commits.find((c) => c.txid === targetTxid);
+      if (commit) {
+        commit.parentTxid = sourceTxid;
+      }
+    }
+  }
+
+  return { blocks, edges };
+}
+
 export function computeMinerVizSnapshot(params: {
   sortitionDb: Database;
   chainstateDb: Database;
@@ -497,11 +683,13 @@ export function computeMinerVizSnapshot(params: {
   processCanonicalTip(sortitionDb, startBlock, blockCommits.allCommits);
 
   const dotSource = generateDot(lowerBound, startBlock, blockCommits);
+  const graph = generateGraph(lowerBound, startBlock, blockCommits);
 
   return {
     bitcoinBlockHeight: startBlock,
     generatedAt: generatedAt ?? new Date().toISOString(),
     sortitionId: latestSnapshot?.sortition_id ?? null,
     dotSource,
+    graph,
   };
 }

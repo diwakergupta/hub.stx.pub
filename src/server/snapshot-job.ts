@@ -188,6 +188,17 @@ function generateSnapshot(dataDir: string) {
       },
       "snapshots.stored",
     );
+
+    if (typeof postMessage === "function") {
+      try {
+        postMessage({
+          type: "snapshot:new",
+          bitcoinBlockHeight: start,
+          sortitionId: canonicalTip.sortitionId,
+          generatedAt,
+        });
+      } catch {}
+    }
   } finally {
     sortitionDb?.close();
     chainstateDb?.close();
