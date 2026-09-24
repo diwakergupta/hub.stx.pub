@@ -91,13 +91,6 @@ const CDF_SERIES = [
   { name: "percentile", label: "Arrival CDF", color: "#06b6d4" },
 ] as const;
 
-const datetimeFormatOptions: Intl.DateTimeFormatOptions = {
-  month: "short",
-  day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-};
-
 const COST_MAX = {
   readLength: 100_000_000,
   readCount: 15_000,
@@ -256,17 +249,17 @@ function ChartCard({
   children: React.ReactNode;
 }) {
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="p-4 pb-2 border-b border-border flex flex-row items-center justify-between space-y-0">
+    <Card className="overflow-hidden w-full">
+      <CardHeader className="p-5 pb-3 border-b border-border flex flex-row items-center justify-between space-y-0">
         <div>
           <CardTitle className="text-base font-semibold">{title}</CardTitle>
           {description && (
-            <CardDescription className="text-xs mt-0.5">{description}</CardDescription>
+            <CardDescription className="text-xs mt-1 text-muted-foreground">{description}</CardDescription>
           )}
         </div>
         {actions}
       </CardHeader>
-      <CardContent className="p-4 h-[380px]">{children}</CardContent>
+      <CardContent className="p-5 h-[420px]">{children}</CardContent>
     </Card>
   );
 }
@@ -349,6 +342,29 @@ export function BlocksPage() {
     }));
   }, [blocks]);
 
+  // Timestamp domain: Start at earliest block in window (with subtle padding)
+  const minTimestampMs = useMemo(() => {
+    if (timestampChartData.length === 0) return null;
+    return Math.min(...timestampChartData.map((d) => d.timestampMs));
+  }, [timestampChartData]);
+
+  const maxTimestampMs = useMemo(() => {
+    if (timestampChartData.length === 0) return null;
+    return Math.max(...timestampChartData.map((d) => d.timestampMs));
+  }, [timestampChartData]);
+
+  const isMultiDay = useMemo(() => {
+    if (minTimestampMs == null || maxTimestampMs == null) return false;
+    return new Date(minTimestampMs).toDateString() !== new Date(maxTimestampMs).toDateString();
+  }, [minTimestampMs, maxTimestampMs]);
+
+  const timestampDomain = useMemo<[number, number] | undefined>(() => {
+    if (minTimestampMs == null || maxTimestampMs == null) return undefined;
+    const diff = Math.max(60 * 1000, maxTimestampMs - minTimestampMs);
+    const bufferMs = diff * 0.04;
+    return [Math.max(0, Math.floor(minTimestampMs - bufferMs)), Math.ceil(maxTimestampMs + bufferMs)];
+  }, [minTimestampMs, maxTimestampMs]);
+
   const cdfData = useMemo<CdfPoint[]>(() => {
     if (blocks.length < 2) return [];
     const diffs: number[] = [];
@@ -366,6 +382,45 @@ export function BlocksPage() {
       percentile: ((index + 1) / diffs.length) * 100,
     }));
   }, [blocks]);
+
+  const minCdfSeconds = useMemo(
+    () => (cdfData.length > 0 ? Math.min(...cdfData.map((d) => d.seconds)) : null),
+    [cdfData],
+  );
+  const maxCdfSeconds = useMemo(
+    () => (cdfData.length > 0 ? Math.max(...cdfData.map((d) => d.seconds)) : null),
+    [cdfData],
+  );
+
+  const cdfDomain = useMemo<[number, number] | undefined>(() => {
+    if (minCdfSeconds == null || maxCdfSeconds == null) return undefined;
+    return [
+      Math.max(0.1, minCdfSeconds * 0.8),
+      Math.max(minCdfSeconds * 1.2, maxCdfSeconds * 1.2, 1),
+    ];
+  }, [minCdfSeconds, maxCdfSeconds]);
+
+  const cdfTicks = useMemo(() => {
+    if (!cdfDomain) return undefined;
+    const [domainMin, domainMax] = cdfDomain;
+    if (!(domainMin > 0) || !(domainMax > domainMin)) return undefined;
+
+    const ticks: number[] = [];
+    const logMin = Math.floor(Math.log10(domainMin));
+    const logMax = Math.ceil(Math.log10(domainMax));
+    const multipliers = [1, 2, 5];
+
+    for (let exp = logMin; exp <= logMax; exp += 1) {
+      const base = 10 ** exp;
+      for (const multiplier of multipliers) {
+        const value = multiplier * base;
+        if (value >= domainMin && value <= domainMax) {
+          ticks.push(Number(value.toPrecision(6)));
+        }
+      }
+    }
+    return Array.from(new Set(ticks)).sort((a, b) => a - b);
+  }, [cdfDomain]);
 
   const costYAxisKeys = useMemo(() => {
     const keys: Record<string, string[]> = {};
@@ -413,7 +468,7 @@ export function BlocksPage() {
   const lastBlock = blocks[blocks.length - 1]?.blockHeight ?? 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Title */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -425,11 +480,12 @@ export function BlocksPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 1. Block Costs vs Size */}
+      {/* Full-width Stacked Charts */}
+      <div className="space-y-8">
+        {/* 1. Block Costs vs Size (Full Width) */}
         <ChartCard
           title="Block Costs vs Size"
-          description="Normalized execution costs across read/write limits alongside block size."
+          description="Normalized execution costs across read/write limits alongside on-chain block size."
           actions={
             costZoom.hasCustomDomain ? (
               <Button size="sm" variant="outline" onClick={costZoom.reset} className="h-7 text-xs gap-1">
@@ -441,7 +497,7 @@ export function BlocksPage() {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
               data={costChartData}
-              margin={{ top: 8, right: 12, left: -10, bottom: 8 }}
+              margin={{ top: 8, right: 20, left: -5, bottom: 8 }}
               onMouseDown={costZoom.onMouseDown}
               onMouseMove={costZoom.onMouseMove}
               onMouseUp={costZoom.onMouseUp}
@@ -482,10 +538,10 @@ export function BlocksPage() {
           </ResponsiveContainer>
         </ChartCard>
 
-        {/* 2. Tenure Costs vs Fees */}
+        {/* 2. Tenure Costs vs Fees (Full Width) */}
         <ChartCard
           title="Tenure Costs vs Fees"
-          description="Normalized tenure-level costs paired with tenure transaction fees in STX."
+          description="Normalized tenure-level costs paired with tenure transaction fees denominated in STX."
           actions={
             tenureZoom.hasCustomDomain ? (
               <Button size="sm" variant="outline" onClick={tenureZoom.reset} className="h-7 text-xs gap-1">
@@ -497,7 +553,7 @@ export function BlocksPage() {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
               data={tenureChartData}
-              margin={{ top: 8, right: 12, left: -10, bottom: 8 }}
+              margin={{ top: 8, right: 20, left: -5, bottom: 8 }}
               onMouseDown={tenureZoom.onMouseDown}
               onMouseMove={tenureZoom.onMouseMove}
               onMouseUp={tenureZoom.onMouseUp}
@@ -538,10 +594,10 @@ export function BlocksPage() {
           </ResponsiveContainer>
         </ChartCard>
 
-        {/* 3. Block Timestamps */}
+        {/* 3. Block Timestamps (Full Width - Starts at Earliest Block in Window) */}
         <ChartCard
           title="Block Timestamps"
-          description="Chronological arrival timestamps for recent blocks."
+          description="Chronological arrival timestamps for recent blocks. The scale starts at the earliest block in this window."
           actions={
             timestampZoom.hasCustomDomain ? (
               <Button size="sm" variant="outline" onClick={timestampZoom.reset} className="h-7 text-xs gap-1">
@@ -553,7 +609,7 @@ export function BlocksPage() {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
               data={timestampChartData}
-              margin={{ top: 8, right: 12, left: 10, bottom: 8 }}
+              margin={{ top: 8, right: 20, left: 10, bottom: 8 }}
               onMouseDown={timestampZoom.onMouseDown}
               onMouseMove={timestampZoom.onMouseMove}
               onMouseUp={timestampZoom.onMouseUp}
@@ -562,12 +618,27 @@ export function BlocksPage() {
               <XAxis dataKey="blockHeight" domain={timestampZoom.xDomain} type="number" allowDataOverflow tick={{ fontSize: 11 }} />
               <YAxis
                 yAxisId="time"
-                tickFormatter={(ms) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                domain={
+                  timestampZoom.hasCustomDomain
+                    ? timestampZoom.getYDomain("time")
+                    : timestampDomain
+                }
+                tickFormatter={(ms) => {
+                  const d = new Date(ms);
+                  if (isMultiDay) {
+                    return `${d.toLocaleDateString([], { month: "short", day: "numeric" })} ${d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+                  }
+                  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+                }}
+                width={isMultiDay ? 100 : 68}
                 tick={{ fontSize: 11 }}
               />
               <Tooltip
                 contentStyle={tooltipStyle}
-                formatter={(val: any) => [new Date(val).toLocaleString([], datetimeFormatOptions), "Timestamp"]}
+                formatter={(val: any) => [
+                  `${new Date(val).toLocaleDateString([], { month: "short", day: "numeric" })}, ${new Date(val).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}`,
+                  "Timestamp",
+                ]}
               />
               <Legend wrapperStyle={{ fontSize: 11, paddingTop: "8px" }} />
               {timestampZoom.referenceArea ? (
@@ -579,6 +650,9 @@ export function BlocksPage() {
                   fill="rgba(129, 140, 248, 0.2)"
                 />
               ) : null}
+              {tenureChangeHeights.map((h) => (
+                <ReferenceLine key={h} x={h} yAxisId="time" stroke="#94a3b8" strokeDasharray="3 3" />
+              ))}
               {TIMESTAMP_SERIES.map((s) => (
                 <Line
                   key={s.name}
@@ -596,14 +670,22 @@ export function BlocksPage() {
           </ResponsiveContainer>
         </ChartCard>
 
-        {/* 4. Block Arrival CDF */}
+        {/* 4. Block Arrival CDF (Full Width) */}
         <ChartCard
           title="Block Arrival CDF"
           description="Distribution of inter-block arrival times on a logarithmic scale."
         >
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={cdfData} margin={{ top: 8, right: 12, left: -10, bottom: 8 }}>
-              <XAxis dataKey="seconds" type="number" scale="log" domain={["auto", "auto"]} tick={{ fontSize: 11 }} />
+            <LineChart data={cdfData} margin={{ top: 8, right: 20, left: -5, bottom: 8 }}>
+              <XAxis
+                dataKey="seconds"
+                type="number"
+                scale="log"
+                domain={cdfDomain}
+                ticks={cdfTicks}
+                allowDataOverflow
+                tick={{ fontSize: 11 }}
+              />
               <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
               <Tooltip contentStyle={tooltipStyle} formatter={(val: any) => [`${Math.round(val)}%`, "Percentile"]} />
               <Legend wrapperStyle={{ fontSize: 11, paddingTop: "8px" }} />
