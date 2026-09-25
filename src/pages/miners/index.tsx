@@ -305,15 +305,6 @@ export function MinersPage({ realtimeEventCounter = 0 }: MinersPageProps) {
         </div>
       )}
 
-      {/* Modern Commit DAG Visualizer */}
-      {vizData?.graph && (
-        <CommitDagView
-          graph={vizData.graph}
-          bitcoinBlockHeight={vizData.bitcoinBlockHeight}
-          generatedAt={vizData.generatedAt}
-        />
-      )}
-
       {/* Miner Power Distribution Table */}
       {powerData && (
         <Card className="overflow-hidden">
@@ -454,6 +445,15 @@ export function MinersPage({ realtimeEventCounter = 0 }: MinersPageProps) {
             </Table>
           </div>
         </Card>
+      )}
+
+      {/* Modern Commit DAG Visualizer */}
+      {vizData?.graph && (
+        <CommitDagView
+          graph={vizData.graph}
+          bitcoinBlockHeight={vizData.bitcoinBlockHeight}
+          generatedAt={vizData.generatedAt}
+        />
       )}
     </div>
   );

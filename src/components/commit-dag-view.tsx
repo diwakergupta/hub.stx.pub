@@ -305,7 +305,7 @@ export function CommitDagView({
       >
         <div
           ref={contentRef}
-          className="relative p-3 sm:p-5 min-w-full inline-block"
+          className="relative p-3 sm:p-5 min-w-full w-full inline-block"
           style={{
             transform: `scale(${zoomLevel})`,
             transformOrigin: "top left",
@@ -332,7 +332,7 @@ export function CommitDagView({
               return (
                 <div
                   key={block.height}
-                  className="flex items-center gap-2.5 p-2 rounded-lg border border-border/50 bg-background/90 backdrop-blur-2xs transition-colors hover:border-border min-w-max w-fit"
+                  className="flex items-center gap-2.5 p-2 rounded-lg border border-border/50 bg-background/90 backdrop-blur-2xs transition-colors hover:border-border min-w-max w-full"
                 >
                   {/* Left Block Header Badge (Clickable with Popover/Modal) */}
                   <div
@@ -371,9 +371,9 @@ export function CommitDagView({
 
                   {/* Miner Commits: Aligned Swimlane Grid Columns */}
                   <div
-                    className="grid gap-2"
+                    className="grid gap-2 flex-1 min-w-0"
                     style={{
-                      gridTemplateColumns: `repeat(${miners.length}, minmax(84px, 110px))`,
+                      gridTemplateColumns: `repeat(${miners.length}, minmax(84px, 1fr))`,
                     }}
                   >
                     {miners.map(([sender, info]) => {
