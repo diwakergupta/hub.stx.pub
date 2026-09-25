@@ -301,7 +301,7 @@ export function CommitDagView({
       {/* Scrollable Canvas Area */}
       <div
         ref={scrollContainerRef}
-        className="overflow-x-auto overflow-y-auto max-h-[75vh] select-none"
+        className="overflow-x-auto overflow-y-auto h-[78vh] min-h-[620px] max-h-[88vh] select-none"
       >
         <div
           ref={contentRef}
@@ -323,7 +323,7 @@ export function CommitDagView({
           </svg>
 
           {/* Temporal Block Rows */}
-          <div className="relative z-10 space-y-3.5">
+          <div className="relative z-10 space-y-6 sm:space-y-7">
             {sortedBlocks.map((block) => {
               const hasWinner = block.commits.some((c) => c.won);
               const commitMap = blockCommitsMap.get(block.height);
@@ -332,7 +332,7 @@ export function CommitDagView({
               return (
                 <div
                   key={block.height}
-                  className="flex items-center gap-2.5 p-2 rounded-lg border border-border/50 bg-background/90 backdrop-blur-2xs transition-colors hover:border-border min-w-max w-full"
+                  className="flex items-center gap-2.5 p-2 rounded-lg border border-border/50 bg-background/90 backdrop-blur-2xs transition-colors hover:border-border min-w-max w-fit"
                 >
                   {/* Left Block Header Badge (Clickable with Popover/Modal) */}
                   <div
@@ -371,9 +371,9 @@ export function CommitDagView({
 
                   {/* Miner Commits: Aligned Swimlane Grid Columns */}
                   <div
-                    className="grid gap-2 flex-1"
+                    className="grid gap-2"
                     style={{
-                      gridTemplateColumns: `repeat(${miners.length}, minmax(110px, 1fr))`,
+                      gridTemplateColumns: `repeat(${miners.length}, minmax(84px, 110px))`,
                     }}
                   >
                     {miners.map(([sender, info]) => {
@@ -401,7 +401,7 @@ export function CommitDagView({
                               setHoveredMiner(null);
                             }}
                             onClick={() => setSelectedCommit(commit)}
-                            className={`h-[42px] px-2 py-1 rounded-md border text-xs cursor-pointer flex flex-col justify-between transition-all duration-150 ${
+                            className={`h-[40px] px-2 py-1 rounded-md border text-xs cursor-pointer flex flex-col justify-between transition-all duration-150 ${
                               commit.won
                                 ? "border-sky-500/80 bg-sky-500/10 shadow-xs ring-1 ring-sky-500/30"
                                 : "border-border/80 bg-card hover:border-primary/50 text-muted-foreground hover:text-foreground"
@@ -451,7 +451,7 @@ export function CommitDagView({
                       return (
                         <div
                           key={sender}
-                          className="h-[42px] rounded-md border border-dashed border-border/20 bg-muted/5 flex items-center justify-center text-[10px] text-muted-foreground/30 font-mono select-none"
+                          className="h-[40px] rounded-md border border-dashed border-border/20 bg-muted/5 flex items-center justify-center text-[10px] text-muted-foreground/30 font-mono select-none"
                           title={`No commit from ${truncateAddress(sender, 4, 3)} in block ${block.height}`}
                         >
                           —
