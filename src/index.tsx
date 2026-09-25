@@ -6,6 +6,7 @@ import { withDataDir, withSnapshot } from "./server/api-utils";
 import { logger } from "./server/logger";
 import { withRequestLogging } from "./server/request-logger";
 import { maybeStartSnapshotWorker } from "./server/worker-manager";
+import { getCachedStacksTip, startTipPoller } from "./server/tip-poller";
 
 const port = parseInt(process.env.PORT || "4020", 10);
 const hostname = process.env.HOST || "0.0.0.0";
@@ -40,6 +41,11 @@ const server = serve({
       }),
     ),
 
+    "/api/stacks/tip": withRequestLogging("/api/stacks/tip", () => {
+      const tip = getCachedStacksTip();
+      return Response.json({ tip });
+    }),
+
     "/api/ws": (req, srv) => {
       if (srv.upgrade(req)) {
         return; // successfully upgraded
@@ -52,6 +58,10 @@ const server = serve({
     open(ws) {
       ws.subscribe("telemetry");
       logger.info("websocket.client.connected");
+      const tip = getCachedStacksTip();
+      if (tip) {
+        ws.send(JSON.stringify({ type: "stacks_tip", data: tip }));
+      }
     },
     message(ws, msg) {
       if (msg === "ping") {
@@ -74,6 +84,13 @@ maybeStartSnapshotWorker((event) => {
     logger.info({ event }, "broadcasting.telemetry.event");
     server.publish("telemetry", JSON.stringify(event));
   }
+});
+
+startTipPoller({
+  onTip: (tip) => {
+    logger.info({ height: tip.blockHeight, hash: tip.blockHash }, "stacks.tip.updated");
+    server.publish("telemetry", JSON.stringify({ type: "stacks_tip", data: tip }));
+  },
 });
 
 logger.info(

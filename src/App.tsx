@@ -6,6 +6,8 @@ import { MinersPage } from "./pages/miners";
 import { BlocksPage } from "./pages/blocks";
 import { UtilitiesPage } from "./pages/utilities";
 import { useTelemetrySocket } from "./hooks/use-telemetry-socket";
+import { useLiveStacksTip } from "./hooks/use-live-stacks-tip";
+import { LiveTelemetryRibbon } from "./components/live-telemetry-ribbon";
 import { Layers, Activity, Wrench, Radio } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -172,13 +174,15 @@ export function App() {
   const isBlocksPage = path === "/blocks" || path.startsWith("/blocks/");
   const isUtilitiesPage = path === "/utilities" || path.startsWith("/utilities/");
 
-  const { status, eventCount } = useTelemetrySocket();
+  const { status, eventCount, lastEvent } = useTelemetrySocket();
+  const telemetry = useLiveStacksTip(lastEvent);
 
   return (
     <ThemeProvider defaultTheme="system">
       <div className="min-h-screen flex flex-col bg-background text-foreground antialiased selection:bg-primary/20 selection:text-primary overflow-x-hidden">
         <Header currentPath={path} connectionStatus={status} />
-        <main className="flex-1 w-full max-w-[1760px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6">
+        <main className="flex-1 w-full max-w-[1760px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-4 sm:space-y-6">
+          <LiveTelemetryRibbon telemetry={telemetry} />
           {isUtilitiesPage ? (
             <UtilitiesPage />
           ) : isBlocksPage ? (
