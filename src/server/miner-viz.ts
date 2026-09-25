@@ -14,8 +14,7 @@ export interface MinerVizSnapshot {
   generatedAt: string;
   bitcoinBlockHeight: number;
   sortitionId: string | null;
-  dotSource: string;
-  graph?: MinerVizGraph;
+  graph: MinerVizGraph;
 }
 
 export const MINER_VIZ_WINDOW = 20;
@@ -306,184 +305,6 @@ export function processCanonicalTip(
     tipTxid = commit.parent;
   }
 }
-
-function normalizeSender(sender: string): string {
-  return sender.replace(/"/g, "").slice(0, 8) || "unknown";
-}
-
-function stringToColor(input: string): string {
-  const pastelColors = [
-    "#E0BBE4",
-    "#957DAD",
-    "#D291BC",
-    "#FEC8D8",
-    "#FFDFD3",
-    "#D9EEF5",
-    "#B6E3F4",
-    "#B5EAD7",
-    "#C7F4F4",
-    "#E8F3F8",
-    "#F4F1BB",
-    "#D4E09B",
-    "#99C4C8",
-    "#F2D0A9",
-    "#E9D5DA",
-    "#D8E2DC",
-    "#FFE5D9",
-    "#FFCAD4",
-    "#F4ACB7",
-    "#9D8189",
-  ];
-
-  const bytes = new TextEncoder().encode(input);
-  if (bytes.length < 8) {
-    return pastelColors[0];
-  }
-  let accumulator = 0n;
-  for (let i = 0; i < 8; i += 1) {
-    accumulator = (accumulator << 8n) | BigInt(bytes[i]);
-  }
-  const index = Number(accumulator % BigInt(pastelColors.length));
-  return pastelColors[index];
-}
-
-function escapeDotString(value: string): string {
-  return value.replace(/"/g, '\\"');
-}
-
-function formatNumber(value: number): string {
-  return new Intl.NumberFormat("en-US").format(Math.round(value));
-}
-
-function buildNodeLabel(commit: BlockCommit): string {
-  const memo = commit.memo ? `📋 ${escapeDotString(commit.memo)}\\l` : "";
-  const parts = [
-    `⛏️ ${normalizeSender(commit.sender)}`,
-    `🔗 ${commit.stacksHeight}`,
-    `💸 ${formatNumber(commit.spend / 1000)}K sats`,
-  ];
-  if (memo) {
-    parts.push(memo);
-  }
-  // Use HTML-like labels for formatting if needed, but simple string is safer/easier for now
-  return parts.join("\\l");
-}
-
-export function generateDot(
-  lowerBound: number,
-  startBlock: number,
-  blockCommits: BlockCommits,
-): string {
-  // We use "TB" (top to bottom) but since we want latest blocks at the bottom,
-  // we'll rely on the order of subgraphs or rankdir.
-  // Actually, standard timeline is often Left-to-Right or Top-to-Bottom.
-  // Let's stick to standard vertical layout.
-  const lines: string[] = [
-    "digraph G {",
-    //    '  graph [rankdir=TB, newrank=true, compound=true, splines=polyline, nodesep=0.2, ranksep=0.4, bgcolor="#FFFFFF"];',
-    // ratio=compress, fontsize=28, fontname=monospace
-    "  graph [rankdir=TB, fontname=monospace];",
-    '  node [shape=component, fontname=monospace, style="filled,dashed,rounded", penwidth=1, margin="0.5,0.2"];',
-    '  edge [penwidth=1.5, color="#718096", arrowsize=0.8];',
-  ];
-
-  for (let height = lowerBound; height <= startBlock; height += 1) {
-    const commits = blockCommits.commitsByBlock.get(height);
-    if (!commits || commits.length === 0) {
-      continue;
-    }
-
-    let sortitionSpend = 0;
-    const nodeLines: string[] = [];
-
-    // Subgraph for the block
-    lines.push(`  subgraph cluster_block_${height} {`);
-    lines.push('    style="filled,rounded";');
-    lines.push('    color="#E2E8F0";');
-    lines.push('    fillcolor="#F7FAFC";');
-    lines.push("    margin=8;");
-
-    for (const commit of commits) {
-      if (sortitionSpend === 0) {
-        sortitionSpend =
-          blockCommits.sortitionFeesMap.get(commit.sortitionId) ?? 0;
-      }
-
-      const label = buildNodeLabel(commit);
-      const nodeId = `"${commit.txid}"`;
-      const url = commit.blockHash
-        ? `https://explorer.hiro.so/block/0x${commit.blockHash}`
-        : `https://mempool.space/tx/${commit.txid}`;
-
-      // Node styling
-      const fillColor = stringToColor(commit.sender);
-      let style = "filled,rounded";
-      let penwidth = 1;
-      let color = "#2D3748"; // Default border color
-
-      if (!commit.won && !commit.canonical) {
-        style = "dashed,filled,rounded";
-      }
-      if (commit.won) {
-        penwidth = 3;
-        color = "#2B6CB0";
-      }
-      if (commit.tip) {
-        penwidth = 4;
-      }
-      if (commit.nextTip) {
-        color = "#38A169";
-      }
-
-      lines.push(
-        `    ${nodeId} [label="${label}", URL="${url}", fillcolor="${fillColor}", color="${color}", style="${style}", penwidth=${penwidth}];`,
-      );
-    }
-
-    const clusterLabel = `₿ ${height}\\l💰 ${formatNumber(sortitionSpend / 1000)}K sats\\l`;
-    lines.push(`    label="${clusterLabel}";`);
-    lines.push("  }"); // End subgraph
-  }
-
-  // Generate edges after defining all nodes to ensure they exist (though Graphviz doesn't strictly require order, it helps readability)
-  for (const commit of blockCommits.allCommits.values()) {
-    if (commit.parent) {
-      const parentCommit = blockCommits.allCommits.get(commit.parent);
-      // Only draw edge if parent is also in the window (it should be, unless it's the very first block of the window)
-      if (parentCommit) {
-        const sourceId = `"${parentCommit.txid}"`;
-        const targetId = `"${commit.txid}"`;
-
-        let color = "#718096"; // Default gray
-        let penwidth = 1.5;
-
-        // Fork detection logic
-        // If parent is not in the immediately preceding block or builds on a non-canonical/losing parent
-        if (
-          commit.burnBlockHeight > parentCommit.burnBlockHeight + 1 ||
-          !parentCommit.canonical ||
-          !parentCommit.won
-        ) {
-          color = "#E53E3E"; // Red
-          penwidth = 2.5;
-        }
-
-        if (commit.canonical) {
-          color = "#3182CE"; // Blue
-          penwidth = 3.0;
-        }
-
-        lines.push(
-          `  ${sourceId} -> ${targetId} [color="${color}", penwidth=${penwidth}];`,
-        );
-      }
-    }
-  }
-
-  lines.push("}");
-  return lines.join("\n");
-}
-
 export function generateGraph(
   lowerBound: number,
   startBlock: number,
@@ -555,118 +376,6 @@ export function generateGraph(
   return { blocks, edges };
 }
 
-export function parseDotToGraph(dotSource: string): MinerVizGraph {
-  const blocks: MinerVizBlock[] = [];
-  const edges: MinerVizEdge[] = [];
-
-  // Match subgraphs: subgraph cluster_block_(\d+) { ... }
-  const clusterRegex =
-    /subgraph\s+cluster_block_(\d+)\s*\{([\s\S]*?)(?=\n\s*subgraph|\n\s*\}[\s\n]*$|\n\s*"[a-fA-F0-9]+"\s*->)/g;
-  let match: RegExpExecArray | null;
-
-  while ((match = clusterRegex.exec(dotSource)) !== null) {
-    const height = parseInt(match[1], 10);
-    const body = match[2];
-
-    let sortitionSpendSats = 0;
-    const spendMatch = body.match(/💰\s*([\d,]+)K sats/);
-    if (spendMatch) {
-      sortitionSpendSats =
-        parseInt(spendMatch[1].replace(/,/g, ""), 10) * 1000;
-    }
-
-    const commits: MinerVizNode[] = [];
-    const nodeRegex =
-      /"([a-fA-F0-9]+)"\s*\[label="([^"]*)",\s*URL="([^"]*)",\s*fillcolor="([^"]*)",\s*color="([^"]*)",\s*style="([^"]*)",\s*penwidth=([\d\.]+)/g;
-    let nodeMatch: RegExpExecArray | null;
-
-    while ((nodeMatch = nodeRegex.exec(body)) !== null) {
-      const txid = nodeMatch[1];
-      const rawLabel = nodeMatch[2];
-      const url = nodeMatch[3];
-      const color = nodeMatch[5];
-      const style = nodeMatch[6];
-      const penwidth = parseFloat(nodeMatch[7]);
-
-      const senderMatch = rawLabel.match(/⛏️\s*([^\\]+)/);
-      const stacksHeightMatch = rawLabel.match(/🔗\s*(\d+)/);
-      const commitSpendMatch = rawLabel.match(/💸\s*([\d,]+)K sats/);
-      const memoMatch = rawLabel.match(/📋\s*([^\\]+)/);
-
-      const sender = senderMatch
-        ? senderMatch[1].trim().replace(/['"]/g, "")
-        : "unknown";
-      const stacksHeight = stacksHeightMatch
-        ? parseInt(stacksHeightMatch[1], 10)
-        : 0;
-      const spendSats = commitSpendMatch
-        ? parseInt(commitSpendMatch[1].replace(/,/g, ""), 10) * 1000
-        : 0;
-      const memo = memoMatch ? memoMatch[1].trim() : "";
-
-      const won = penwidth >= 3 || color === "#2B6CB0";
-      const tip = penwidth >= 4;
-      const canonical = !style.includes("dashed") || won;
-
-      let blockHash: string | null = null;
-      if (url.includes("/block/0x")) {
-        blockHash = url.split("/block/0x")[1];
-      }
-
-      commits.push({
-        txid,
-        sender,
-        burnBlockHeight: height,
-        spendSats,
-        sortitionId: "",
-        memo,
-        parentTxid: null,
-        stacksHeight,
-        blockHash,
-        won,
-        canonical,
-        tip,
-        coinbaseEarned: 0,
-        feesEarned: 0,
-      });
-    }
-
-    blocks.push({
-      height,
-      sortitionSpendSats,
-      commits,
-    });
-  }
-
-  // Parse edges: "parent" -> "child" [color="...", penwidth=...];
-  const edgeRegex =
-    /"([a-fA-F0-9]+)"\s*->\s*"([a-fA-F0-9]+)"\s*\[color="([^"]*)",\s*penwidth=([\d\.]+)/g;
-  let edgeMatch: RegExpExecArray | null;
-  while ((edgeMatch = edgeRegex.exec(dotSource)) !== null) {
-    const sourceTxid = edgeMatch[1];
-    const targetTxid = edgeMatch[2];
-    const color = edgeMatch[3];
-    const isFork = color === "#E53E3E";
-    const canonical = color === "#3182CE";
-
-    edges.push({
-      sourceTxid,
-      targetTxid,
-      canonical,
-      isFork,
-    });
-
-    for (const b of blocks) {
-      const commit = b.commits.find((c) => c.txid === targetTxid);
-      if (commit) {
-        commit.parentTxid = sourceTxid;
-      }
-    }
-  }
-
-  return { blocks, edges };
-}
-
 export function computeMinerVizSnapshot(params: {
   sortitionDb: Database;
   chainstateDb: Database;
@@ -687,14 +396,12 @@ export function computeMinerVizSnapshot(params: {
   );
   processCanonicalTip(sortitionDb, startBlock, blockCommits.allCommits);
 
-  const dotSource = generateDot(lowerBound, startBlock, blockCommits);
   const graph = generateGraph(lowerBound, startBlock, blockCommits);
 
   return {
     bitcoinBlockHeight: startBlock,
     generatedAt: generatedAt ?? new Date().toISOString(),
     sortitionId: latestSnapshot?.sortition_id ?? null,
-    dotSource,
     graph,
   };
 }

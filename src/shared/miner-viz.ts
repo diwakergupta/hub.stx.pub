@@ -38,6 +38,5 @@ export interface MinerVizResponse {
   generatedAt: string;
   sortitionId: string | null;
   description: string;
-  dotSource?: string;
   graph: MinerVizGraph;
 }

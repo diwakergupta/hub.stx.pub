@@ -11,14 +11,6 @@ const port = parseInt(process.env.PORT || "4020", 10);
 const hostname = process.env.HOST || "0.0.0.0";
 const isProduction = process.env.NODE_ENV === "production";
 
-// In development, ensure CSS is up to date
-if (!isProduction) {
-  try {
-    Bun.spawnSync(["bunx", "tailwindcss", "-i", "./src/input.css", "-o", "./src/index.css"]);
-  } catch (err) {
-    logger.warn({ err }, "tailwindcss.dev-compile.warning");
-  }
-}
 
 const server = serve({
   port,

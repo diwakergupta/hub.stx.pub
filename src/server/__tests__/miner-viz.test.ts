@@ -1,19 +1,5 @@
 import { expect, test } from "bun:test";
-import { generateDot, generateGraph, parseDotToGraph } from "@/server/miner-viz";
-
-test("generateDot produces valid DOT structure", () => {
-  const emptyCommits = {
-    sortitionFeesMap: new Map(),
-    allCommits: new Map(),
-    commitsByBlock: new Map(),
-  };
-
-  const dot = generateDot(100, 110, emptyCommits);
-
-  expect(dot).toContain("digraph G {");
-  expect(dot).toContain("graph [rankdir=TB, fontname=monospace];");
-  expect(dot).toContain("}");
-});
+import { generateGraph } from "@/server/miner-viz";
 
 test("generateGraph produces structured blocks and edges", () => {
   const commit1 = {
@@ -66,57 +52,65 @@ test("generateGraph produces structured blocks and edges", () => {
     parentKey: "100:0",
   };
 
+  const commit3 = {
+    burnHeaderHash: "hash3",
+    txid: "tx3",
+    vtxindex: 1,
+    sender: "bc1qtest3",
+    burnBlockHeight: 103, // skipped a block -> fork attempt
+    spend: 40000,
+    sortitionId: "sort3",
+    parentBlockPtr: 100,
+    parentVtxindex: 0,
+    memo: "",
+    parent: "tx1",
+    stacksHeight: 11,
+    blockHash: null,
+    won: false,
+    canonical: false,
+    tip: false,
+    coinbaseEarned: 0,
+    feesEarned: 0,
+    potentialTip: false,
+    nextTip: false,
+    key: "103:1",
+    parentKey: "100:0",
+  };
+
   const commits = {
     sortitionFeesMap: new Map([
       ["sort1", 50000],
       ["sort2", 60000],
+      ["sort3", 40000],
     ]),
     allCommits: new Map([
       ["tx1", commit1],
       ["tx2", commit2],
+      ["tx3", commit3],
     ]),
     commitsByBlock: new Map([
       [100, [commit1]],
       [101, [commit2]],
+      [103, [commit3]],
     ]),
   };
 
-  const graph = generateGraph(100, 101, commits);
+  const graph = generateGraph(100, 103, commits);
 
-  expect(graph.blocks.length).toBe(2);
+  expect(graph.blocks.length).toBe(3);
   expect(graph.blocks[0].height).toBe(100);
   expect(graph.blocks[0].commits.length).toBe(1);
   expect(graph.blocks[0].commits[0].txid).toBe("tx1");
   expect(graph.blocks[0].commits[0].won).toBe(true);
 
-  expect(graph.edges.length).toBe(1);
-  expect(graph.edges[0].sourceTxid).toBe("tx1");
-  expect(graph.edges[0].targetTxid).toBe("tx2");
-  expect(graph.edges[0].canonical).toBe(true);
-});
+  expect(graph.edges.length).toBe(2);
+  const canonicalEdge = graph.edges.find((e) => e.targetTxid === "tx2");
+  expect(canonicalEdge?.sourceTxid).toBe("tx1");
+  expect(canonicalEdge?.canonical).toBe(true);
+  expect(canonicalEdge?.isFork).toBe(false);
 
-test("parseDotToGraph parses DOT into structured graph", () => {
-  const sampleDot = `digraph G {
-  subgraph cluster_block_885000 {
-    label="₿ 885000\\l💰 120K sats\\l";
-    "abcd1234abcd1234" [label="⛏️ bc1qtest\\l🔗 9000\\l💸 120K sats\\l", URL="https://explorer.hiro.so/block/0xdeadbeef", fillcolor="#fff", color="#2B6CB0", style="filled,rounded", penwidth=3];
-  }
-  subgraph cluster_block_885001 {
-    label="₿ 885001\\l💰 150K sats\\l";
-    "efaa5678efaa5678" [label="⛏️ bc1qtest2\\l🔗 9001\\l💸 150K sats\\l", URL="https://mempool.space/tx/efaa", fillcolor="#fff", color="#3182CE", style="filled,rounded", penwidth=4];
-  }
-  "abcd1234abcd1234" -> "efaa5678efaa5678" [color="#3182CE", penwidth=3];
-}`;
-
-  const graph = parseDotToGraph(sampleDot);
-  expect(graph.blocks.length).toBe(2);
-  expect(graph.blocks[0].height).toBe(885000);
-  expect(graph.blocks[0].commits[0].txid).toBe("abcd1234abcd1234");
-  expect(graph.blocks[0].commits[0].won).toBe(true);
-  expect(graph.blocks[0].commits[0].blockHash).toBe("deadbeef");
-
-  expect(graph.edges.length).toBe(1);
-  expect(graph.edges[0].sourceTxid).toBe("abcd1234abcd1234");
-  expect(graph.edges[0].targetTxid).toBe("efaa5678efaa5678");
-  expect(graph.edges[0].canonical).toBe(true);
+  const forkEdge = graph.edges.find((e) => e.targetTxid === "tx3");
+  expect(forkEdge?.sourceTxid).toBe("tx1");
+  expect(forkEdge?.canonical).toBe(false);
+  expect(forkEdge?.isFork).toBe(true);
 });
